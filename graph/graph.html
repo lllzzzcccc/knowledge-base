@@ -1,0 +1,3042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LLM Wiki — Knowledge Graph</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  body { margin: 0; background: #1a1a2e; font-family: 'Inter', sans-serif; color: #eee; }
+  #graph { width: 100vw; height: 100vh; }
+  #controls {
+    position: fixed; top: 10px; left: 10px; background: rgba(10,10,30,0.88);
+    padding: 14px; border-radius: 10px; z-index: 10; max-width: 280px;
+    backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08);
+  }
+  #controls h3 { margin: 0 0 10px; font-size: 15px; letter-spacing: 0.5px; }
+  #search { width: 100%; padding: 6px 8px; margin-bottom: 10px; background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; font-size: 13px; }
+  #controls p { margin: 10px 0 0; font-size: 11px; color: #9ea3b0; line-height: 1.5; }
+  .filter-group { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+  .filter-group label { display: block; font-size: 12px; color: #bbb; margin-bottom: 4px; }
+  .slider-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .slider-row input[type=range] { flex: 1; accent-color: #FF5722; }
+  .slider-val { font-size: 12px; color: #FF5722; min-width: 28px; text-align: right; font-weight: bold; }
+  .cb-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 3px 0; cursor: pointer; }
+  .cb-row input { accent-color: #FF5722; }
+  #drawer {
+    position: fixed; top: 0; right: 0; width: clamp(480px, 33vw, 720px); max-width: 100vw; height: 100vh;
+    background: rgba(7, 10, 24, 0.96); border-left: 1px solid rgba(255,255,255,0.08);
+    box-shadow: -18px 0 36px rgba(0,0,0,0.35); z-index: 20; display: none;
+    flex-direction: column; backdrop-filter: blur(10px);
+  }
+  #drawer.open { display: flex; }
+  #drawer-header {
+    padding: 18px 18px 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  #drawer-topline {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+  #drawer-title { margin: 0; font-size: 20px; line-height: 1.2; }
+  #drawer-close {
+    background: transparent; color: #9ea3b0; border: 0; font-size: 24px; line-height: 1;
+    cursor: pointer; padding: 0;
+  }
+  #drawer-meta { margin-top: 8px; font-size: 12px; color: #9ea3b0; }
+  #drawer-path { margin-top: 6px; font-size: 12px; color: #72788a; word-break: break-all; }
+  #drawer-preview {
+    margin-top: 12px; font-size: 13px; color: #d7d9e0; line-height: 1.6;
+  }
+  #drawer-related {
+    padding: 12px 18px 0; font-size: 12px; color: #9ea3b0;
+  }
+  #drawer-related-list {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+  }
+  .related-chip {
+    background: rgba(255,255,255,0.08); color: #f1f2f7; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px; font-size: 12px; padding: 5px 10px; cursor: pointer;
+  }
+  #drawer-content {
+    flex: 1; min-height: 0; padding: 14px 18px 18px; overflow: auto;
+  }
+  #drawer-markdown {
+    color: #e6e8ef; font-size: 13px; line-height: 1.72;
+  }
+  #drawer-markdown h1, #drawer-markdown h2, #drawer-markdown h3,
+  #drawer-markdown h4, #drawer-markdown h5, #drawer-markdown h6 {
+    margin: 1.2em 0 0.55em; line-height: 1.3; color: #fff;
+  }
+  #drawer-markdown h1 { font-size: 24px; }
+  #drawer-markdown h2 { font-size: 20px; }
+  #drawer-markdown h3 { font-size: 17px; }
+  #drawer-markdown p { margin: 0 0 0.95em; }
+  #drawer-markdown ul, #drawer-markdown ol { margin: 0 0 1em 1.35em; padding: 0; }
+  #drawer-markdown li { margin: 0.35em 0; }
+  #drawer-markdown hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.2em 0; }
+  #drawer-markdown blockquote {
+    margin: 0 0 1em; padding: 0.85em 1em; border-left: 3px solid rgba(101, 181, 255, 0.8);
+    background: rgba(255,255,255,0.04); color: #d7d9e0; border-radius: 0 10px 10px 0;
+  }
+  #drawer-markdown pre {
+    margin: 0 0 1em; white-space: pre-wrap; word-break: break-word; line-height: 1.55;
+    font-size: 12px; color: #e6e8ef; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  #drawer-markdown code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em; background: rgba(255,255,255,0.08); padding: 0.16em 0.38em;
+    border-radius: 6px; color: #ffde91;
+  }
+  #drawer-markdown pre code { background: transparent; padding: 0; color: inherit; border-radius: 0; }
+  #drawer-markdown .wikilink { color: #86c8ff; font-weight: 600; }
+  @media (max-width: 960px) {
+    #drawer { width: 100vw; }
+  }
+  #stats {
+    position: fixed; top: 10px; right: 10px; background: rgba(10,10,30,0.88);
+    padding: 10px 14px; border-radius: 10px; font-size: 12px;
+    backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08);
+  }
+</style>
+</head>
+<body>
+<div id="controls">
+  <h3>LLM Wiki Graph</h3>
+  <input id="search" type="text" placeholder="Search nodes..." oninput="searchNodes(this.value)">
+  <div><span style="background:#4CAF50;padding:3px 8px;margin:2px;border-radius:3px;font-size:12px">source</span><span style="background:#2196F3;padding:3px 8px;margin:2px;border-radius:3px;font-size:12px">entity</span><span style="background:#FF9800;padding:3px 8px;margin:2px;border-radius:3px;font-size:12px">concept</span><span style="background:#9C27B0;padding:3px 8px;margin:2px;border-radius:3px;font-size:12px">synthesis</span></div>
+  <div class="filter-group">
+    <label>Edge Types</label>
+    <div class="cb-row"><input type="checkbox" id="cb-extracted" checked onchange="applyFilters()"><span style="color:#888">━</span> Extracted (208)</div>
+    <div class="cb-row"><input type="checkbox" id="cb-inferred" checked onchange="applyFilters()"><span style="color:#FF5722">━</span> Inferred (0)</div>
+    <div class="cb-row"><input type="checkbox" id="cb-ambiguous" onchange="applyFilters()"><span style="color:#BDBDBD">━</span> Ambiguous (0)</div>
+  </div>
+  <div class="filter-group">
+    <label>Min Confidence</label>
+    <div class="slider-row">
+      <input type="range" id="conf-slider" min="0" max="100" value="50" oninput="applyFilters()">
+      <span class="slider-val" id="conf-val">0.50</span>
+    </div>
+  </div>
+  <p>Click a node to highlight its connected neighbors and view the markdown on the right. Click the background to restore the full graph.</p>
+</div>
+<div id="graph"></div>
+<aside id="drawer">
+  <div id="drawer-header">
+    <div id="drawer-topline">
+      <h2 id="drawer-title"></h2>
+      <button id="drawer-close" onclick="clearSelection()" aria-label="Close drawer">×</button>
+    </div>
+    <div id="drawer-meta"></div>
+    <div id="drawer-path"></div>
+    <div id="drawer-preview"></div>
+  </div>
+  <div id="drawer-related">
+    Related nodes
+    <div id="drawer-related-list"></div>
+  </div>
+  <div id="drawer-content">
+    <div id="drawer-markdown"></div>
+  </div>
+</aside>
+<div id="stats"></div>
+<script>
+const originalNodes = [
+  {
+    "id": "overview",
+    "label": "Overview",
+    "type": "synthesis",
+    "color": "#9C27B0",
+    "path": "wiki\\overview.md",
+    "markdown": "---\ntitle: \"Overview\"\ntype: synthesis\ntags: [操作系统, 并发, IO, MCP, AI]\nsources: [process-vs-thread, six-ipc-mechanisms, mcp-explained, claude-concurrency-io-session]\nlast_updated: 2026-09-28\n---\n\n# Overview\n\n*This page is maintained by the LLM. It is updated on every ingest to reflect the current synthesis across all sources.*\n\n## 知识领域一：操作系统基础（进程、线程与 IPC）\n\n知识库现有两篇知乎操作系统专栏文章，构成互补的整体：[[process-vs-thread]] 回答\"[[Process]] 与 [[Thread]] 是什么、为什么区分\"，[[six-ipc-mechanisms]] 回答\"隔离的进程之间如何通信（[[IPC]]）\"。\n\n### 进程与线程模型\n\n- **执行环境**：[[UserModeVsKernelMode]]——CPU 特权级划分用户态/内核态，系统调用即陷入；也给出\"判断一行代码是否陷入内核\"的判据与 strace 验证法。\n- **[[Process]]** = 资源分配基本单位：程序在专属地址空间（代码区/数据区/堆栈区）内的动态执行实例，地址空间相互隔离（一个崩溃不影响其他）。\n- **[[Thread]]** = CPU 调度执行基本单位：仅私有运行栈、PC、部分寄存器，共享进程的五类资源（代码/数据/堆/文件描述符/信号处理）。\n- **[[ContextSwitch]]**：进程切换开销是线程切换的 10~100 倍（进程上下文含地址空间信息）——线程存在的核心原因。\n- **[[ConcurrencyAndParallelism]]**：单核靠时间片轮转实现并发，多核实现并行；CPU 密集型宜多进程/少线程，IO 密集型宜多线程。\n\n### 进程通信六机制（Linux 内核）\n\n进程用户地址空间隔离、内核空间共享 → 通信必经内核。演进主线：**[[Pipe]]（无格式字节流）→ [[MessageQueue]]（有格式但拷贝开销大）→ [[SharedMemory]]（零拷贝最快但需同步）**，配套 **[[Semaphore]]**（PV 操作实现互斥与同步）、**[[Signal]]**（唯一异步机制，≠ 信号量）、**[[Socket]]**（唯一可跨网络）。\n\n### 贯穿性主线\n\n\"隔离换安全，共享换效率\"：进程间用地址空间隔离换取稳定性（崩溃隔离），线程与共享内存用共享换取性能；所有同步机制（信号量/PV、互斥锁）都是在共享前提下重建秩序的补丁。用户态同步原语的全家福（互斥锁/条件变量/读写锁/自旋锁）见 [[ThreadSynchronization]]。\n\n## 知识领域二：应用层并发与 IO 模型\n\n[[claude-concurrency-io-session]] 把 OS 概念延伸到 Java/Node 工程实践，主线是\"**用极少的线程扛住海量 I/O**\"：\n\n- **[[IOModels]]**：BIO（一连接一线程，C10K 根源）→ NIO（非阻塞但同步，Reactor）→ AIO（内核代劳拷贝，Proactor）；两个正交维度是阻塞/非阻塞 × 同步/异步。\n- **[[IOMultiplexing]]**：让一个线程同时阻塞在 N 个连接上；epoll 以红黑树注册 + 就绪链表回调实现 O(1) 就绪查询。\n- **[[EventLoop]]**：单线程串行消费就绪事件队列（Node/libuv）；Java AIO 则是就绪队列 + 线程池并发消费——回调是否要加锁由此决定。\n- **[[FutureAndPromise]]**：Future 是阻塞句柄，Promise 是回调协议；CompletableFuture 才是 Java 版 Promise。\n- **[[AddressSpaceLayout]]**：每个进程地址空间分用户空间（私有）与内核空间（共享同一内核）两半，页表权限位 + CPU 特权级硬件强制；I/O、IPC、系统调用本质都是跨这个边界。\n- **Java 内存三层视角**：[[JVM]]（进程内的字节码运行时，租户）→ [[JvmRuntimeMemory]]（JVM 对用户空间的逻辑分区：堆/方法区共享 + 每线程私有栈/PC）→ [[JavaMemoryModel]]（其上的并发规范：主内存/工作内存是物理内存与 CPU 缓存的抽象，happens-before 管可见性与有序性）。\n- **协程主线**：[[Goroutine]]（GMP + 动态栈 + netpoller）把调度决策和等待挂起搬回用户态，让\"过边界\"的频率和代价最小化——写同步代码享受 NIO 性能。\n- **实证**：[[ClaudeCode]] 的并行子 agent 即 EventLoop 模型——单线程 async/await 协程并发（in-process）+ 多进程（swarm/tmux），全程无 worker_threads；Java 21 虚拟线程则把 epoll 多路复用做进运行时。\n- **铁律**：别在单线程事件循环里跑阻塞/CPU 密集任务；别在非阻塞框架里写阻塞代码；永远用连接池、设超时。\n\n## 知识领域三：AI 应用基础设施（MCP）\n\n[[mcp-explained]] 将知识库扩展到 AI 工程领域：[[ModelContextProtocol]]（MCP，[[Anthropic]] 推出的开放协议）为 LLM 与外部工具/数据源建立标准化连接，被类比为\"AI 应用的 USB-C 接口\"。\n\n- **架构**：MCP Host（Cursor、Claude Desktop、Cline 等）→ MCP Client（调度与通信层）→ MCP Server（能力网关）。\n- **三大原语**：[[MCPTool]]（可执行、改变状态）、[[MCPResource]]（只读上下文，URI 定位）、[[MCPPrompt]]（标准化任务模板）。\n- **通信机制**：统一 JSON-RPC；传输层 STDIO（本地进程级，默认）→ SSE（已弃用）→ Streamable HTTP（官方推荐）。\n- **工程价值**：解耦模型与工具的交互复杂度，而非替代现有架构。\n\n### 跨领域呼应\n\n三大领域形成\"基础机制 → 上层应用\"的纵向贯通：MCP 的 STDIO 本质是 [[Pipe]]（匿名管道），SSE/Streamable HTTP 建立在 [[Socket]] 的跨网络能力之上；应用层并发复用 OS 的等待队列与 [[UserModeVsKernelMode]] 系统调用（epoll_wait 即陷入内核），又用 [[ClaudeCode]] 的实例印证 [[Thread]]/[[Process]] 的取舍。线程本质的三层拆解见综合页 [[thread-essence]]。\n",
+    "preview": "# Overview *This page is maintained by the LLM. It is updated on every ingest to reflect the current synthesis across all sources.* ## 知识领域一：操作系统基础（进程、线程与 IPC）",
+    "group": -1,
+    "value": 34
+  },
+  {
+    "id": "concepts/AddressSpaceLayout",
+    "label": "进程地址空间布局 (Address Space Layout)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\AddressSpaceLayout.md",
+    "markdown": "---\ntitle: \"进程地址空间布局 (Address Space Layout)\"\ntype: concept\ntags: [操作系统, 内存, 基础概念]\nsources: [process-vs-thread, six-ipc-mechanisms]\nlast_updated: 2026-09-28\n---\n\n# 进程地址空间布局 (Address Space Layout)\n\n**每个进程的虚拟地址空间分成两半：低地址的\"用户空间\"（进程私有）+ 高地址的\"内核空间\"（所有进程共享同一份内核）。** 进程平时只能访问用户空间；内核空间是\"只能看不能摸\"的禁区，唯一合法的进入方式是系统调用。\n\n## 空间图\n\n```\n4G ┌─────────────────┐\n   │    内核空间       │ ← 所有进程映射到【同一块物理内存】\n   │  (约 3G~4G)      │   内核代码、内核数据结构、\n   │                 │   每个 socket 的收发缓冲区……\n3G ├─────────────────┤ ← 经典 3:1 分界（Linux 32位；\n   │    栈 ↓          │   64 位理论对半分，窗口巨大）\n   │  .........      │\n   │    堆 ↑          │ ← 用户空间，进程私有\n   │    数据区        │   （[[Process]] 的代码区/数据区/堆栈区\n   │    代码区        │     全部属于这一半）\n0  └─────────────────┘\n```\n\n## 三个关键认知\n\n**1. 这是虚拟地址空间的划分，不是物理内存的划分。** 每个进程有一套完整的虚拟地址编号，MMU + 页表负责翻译成物理地址。分两半的本质是**页表项的权限位**不同：用户空间页标记\"用户可访问\"，内核空间页标记\"仅内核态可访问\"。\n\n**2. CPU 特权级是执行时的闸门。** 用户态下硬件拦截对内核页的访问——进程直接用指针读内核地址立刻触发页保护异常被杀掉（[[UserModeVsKernelMode]]）。所以分两半不是软件约定，是硬件强制。\n\n**3. 内核空间装着\"同一份内核\"。** 所有进程页表的内核空间部分映射到相同物理页——你进程里的 3G 处和别的进程里的 3G 处是同一扇窗。这就是\"内核空间共享\"的含义，也是 [[IPC]] 必须经内核的物理基础：进程 A 把数据写进内核（如 [[Pipe]] 缓冲区），B 从同一块内核内存读到。共享内存（[[SharedMemory]]）是唯一例外——在两进程用户空间各映射同一物理页，读写完全不过内核。\n\n## 数据如何跨空间流动\n\n以 `read(fd, buf, size)` 为例：\n\n```\n网卡数据 → DMA 拷入【内核空间】的 socket 接收缓冲区\n              │\n线程调 read()，陷入内核（特权级切换 + 换内核栈，[[ContextSwitch]]）\n              │\n内核把数据从内核缓冲区拷到 buf（用户空间）\n              │\n返回用户态，线程拿到数据\n```\n\n一次网络读取至少一次**跨空间拷贝**——\"零拷贝\"（sendfile、mmap）优化的就是这个。BIO 里线程\"等数据\"，等的就是内核缓冲区（[[IOMultiplexing]] 的等待队列也在内核空间）。\n\n## 与协程的关系\n\n协程没有消除这个边界，但把\"过边界的频率和代价\"压到最低：调度决策搬回用户态、等待改为用户态挂起，只有极少线程在内核边上轮询。详见 [[Goroutine]]。\n\n## 关联概念\n\n- [[UserModeVsKernelMode]] — 两半空间的访问规则是该页的内存版表述\n- [[Process]] — 用户空间的三区结构；[[Thread]] — 同进程线程共享整个布局\n- [[ContextSwitch]] — 陷入内核要换栈，两套栈分居两个空间\n- [[IPC]] / [[SharedMemory]] — 经内核通信 vs 绕过内核\n- [[IOMultiplexing]] — 就绪事件与数据都在内核空间\n- [[JvmRuntimeMemory]] — JVM 对用户空间的逻辑分区；[[JavaMemoryModel]] — 其上的并发访问规范\n- [[JVM]] — 租户本身：进程内执行字节码的语言运行时\n\n## 来源\n\n- 由 query 工作流提炼（[[process-vs-thread]]、[[six-ipc-mechanisms]] 的延伸）\n",
+    "preview": "# 进程地址空间布局 (Address Space Layout) **每个进程的虚拟地址空间分成两半：低地址的\"用户空间\"（进程私有）+ 高地址的\"内核空间\"（所有进程共享同一份内核）。** 进程平时只能访问用户空间；内核空间是\"只能看不能摸\"的禁区，唯一合法的进入方式是系统调用。 ## 空间图",
+    "group": -1,
+    "value": 18
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism",
+    "label": "并发与并行 (Concurrency & Parallelism)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\ConcurrencyAndParallelism.md",
+    "markdown": "---\ntitle: \"并发与并行 (Concurrency & Parallelism)\"\ntype: concept\ntags: [操作系统, 并发]\nsources: [process-vs-thread, six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 并发与并行 (Concurrency & Parallelism)\n\n## 时间片轮转\n\n基本事实：**单核 CPU 一个瞬间只能处理一个任务**。单核电脑能\"同时\"听音乐、浏览网页，靠的是 OS 给每个 [[Process]]（或 [[Thread]]）分配**时间片**（如 10ms），时间一到强制切换到下一个任务。CPU 每秒切换成千上万次，人类感觉不到顿挫（[[process-vs-thread]]）。\n\n## 定义对比\n\n| | 并发 (Concurrency) | 并行 (Parallelism) |\n|---|---|---|\n| 含义 | 单核轮流操作多任务，靠快速切换\"看似同时\" | 多核同时操作多任务，\"真正同时\" |\n| 类比 | 一个厨师轮流炒两锅菜 | 两个厨师各炒一锅菜 |\n| 硬件要求 | 单核即可 | 需多核/多 CPU |\n\n## 异步性\n\n多道批处理系统中多个进程并发执行，但因资源有限，进程\"走走停停\"，以不可预知的速度推进（异步性）——这正是需要 [[Semaphore]] 等同步机制保证执行顺序的原因（[[six-ipc-mechanisms]]）。\n\n## 任务类型选型\n\n- **CPU 密集型**（数据运算、算法执行）：建议多进程或少线程，避免 [[ContextSwitch]] 频繁切换浪费时间\n- **IO 密集型**（读文件、网络请求）：建议多线程，线程等待 IO 时 CPU 切换到其他线程提升利用率\n\n## 关联概念\n\n- [[Process]] / [[Thread]]：时间片调度的对象\n- [[ContextSwitch]]：并发得以实现的底层机制\n",
+    "preview": "# 并发与并行 (Concurrency & Parallelism) ## 时间片轮转 基本事实：**单核 CPU 一个瞬间只能处理一个任务**。单核电脑能\"同时\"听音乐、浏览网页，靠的是 OS 给每个 [[Process]]（或 [[Thread]]）分配**时间片**（如 10ms），时间一到强制切换到下一个任务。CPU 每秒切换成千上万次，人类感觉不到顿挫（[[process-vs-thread]]）。",
+    "group": -1,
+    "value": 12
+  },
+  {
+    "id": "concepts/ContextSwitch",
+    "label": "上下文切换 (Context Switch)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\ContextSwitch.md",
+    "markdown": "---\ntitle: \"上下文切换 (Context Switch)\"\ntype: concept\ntags: [操作系统, 性能]\nsources: [process-vs-thread]\nlast_updated: 2026-09-25\n---\n\n# 上下文切换 (Context Switch)\n\n上下文是运行状态的完整快照，切换是实现多任务\"无缝\"并发的核心机制（[[process-vs-thread]]）。\n\n## 进程上下文（重量级）\n\n以\"浏览器切到音乐软件\"为例，OS 执行两步：保存浏览器进程上下文（写入 PCB，相当于拍全景照）→ 加载音乐进程上下文（从 PCB 读取快照，重建内存映射，继续播放进度）。包含四类信息：\n\n| 组成 | 内容 | 类比 |\n|---|---|---|\n| CPU 寄存器值 | 累加器、程序计数器（PC）、栈指针 | 车间设备参数 |\n| 进程状态 | PCB 管理的就绪/运行/阻塞等 | 车间生产进度 |\n| 地址空间信息 | 页表/段表（虚拟→物理映射）、内存权限 | 车间布局 + 区域规则 |\n| 内核栈与用户栈 | 系统调用参数 / 函数局部变量 | 管理员调度笔记 / 工人操作记录 |\n\n## 线程上下文（轻量级）\n\n仅含运行栈、程序计数器、部分寄存器，**不含地址空间信息**。\n\n## 开销对比\n\n因进程上下文包含地址空间信息这类重量级数据，**进程切换开销通常是线程切换的 10~100 倍**——这是 [[Thread]] 存在的核心原因，也是 CPU 密集型任务宜用多进程/少线程的依据（见 [[ConcurrencyAndParallelism]]）。\n\n## 关联概念\n\n- [[Process]]：进程切换的主体与开销来源\n- [[Thread]]：线程切换开销低的原因\n- [[UserModeVsKernelMode]]：陷入/返回是轻量的特权级切换，与进程上下文切换区分开\n- [[ConcurrencyAndParallelism]]：时间片轮转是触发切换的调度策略\n",
+    "preview": "# 上下文切换 (Context Switch) 上下文是运行状态的完整快照，切换是实现多任务\"无缝\"并发的核心机制（[[process-vs-thread]]）。 ## 进程上下文（重量级）",
+    "group": -1,
+    "value": 13
+  },
+  {
+    "id": "concepts/EventLoop",
+    "label": "事件循环 (Event Loop)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\EventLoop.md",
+    "markdown": "---\ntitle: \"事件循环 (Event Loop)\"\ntype: concept\ntags: [并发, Node.js, 事件循环, 异步]\nsources: [claude-concurrency-io-session]\nlast_updated: 2026-09-26\n---\n\n# 事件循环 (Event Loop)\n\n事件循环 = **一个线程循环消费\"就绪事件队列\"**:I/O 多路复用([[IOMultiplexing]])返回就绪事件后,把对应回调丢进队列,由单线程一个个串行执行([[claude-concurrency-io-session]])。它是\"单线程为什么能扛高并发\"的架构答案。\n\n## Node.js(libuv)模型\n\n- 底层多路复用:epoll(Linux)/ kqueue(macOS)/ IOCP(Windows)\n- 消费执行体:**1 个事件循环线程**,回调串行执行\n- 回调里基本不用加锁(单线程),这是与 Java AIO 的关键区别\n\n## 对比:Node 事件循环 vs Java AIO\n\n| 维度 | Node.js(libuv) | Java AIO(NIO.2) |\n|---|---|---|\n| 底层多路复用 | epoll / kqueue / IOCP | epoll(Linux)/ IOCP(Windows) |\n| 消费事件的执行体 | **1 个事件循环线程** | **线程池(N 个线程)** |\n| 回调执行 | 串行,一次一个 | 并发,可能同时多个 |\n| 回调共享数据 | 基本不用加锁 | 要线程安全 |\n| 数据拷贝 | 主线程同步 read | 池线程同步 read |\n\n一句话:**Node 是\"一个 loop 串行消费事件\";Java AIO 是\"一个就绪队列 + 多线程并发消费\"。** 生产者-消费者视角:两者都是\"事件生产者→队列\",Node 只有一个消费者,Java AIO 有多个。注意 Linux 上 JDK AIO 的\"异步\"是 epoll+线程池模拟出来的语义异步([[IOModels]])。\n\n## 铁律:别堵住唯一的那根线程\n\n- ❌ 在请求处理里用同步 API:`fs.readFileSync`、`execSync`、同步 `crypto`——冻结**整个服务**,所有请求一起卡\n- ❌ CPU 密集操作跑主线程:大 `JSON.parse`、大数组循环、图片处理——拖慢事件循环;重活丢给 `worker_threads` / `child_process`\n- ✅ 一律 `async/await`(别忘了 `await`,漏了就是 unhandled rejection)\n- ✅ 任何 HTTP/DB 调用都设超时,否则一个挂起连接饿死事件循环\n\n[[ClaudeCode]] 的 in-process 子 agent 并发正是这个模型:多个 agent 是事件循环上交错推进的 async/await 协程,每个 agent 大部分时间在 await LLM 网络 I/O,await 期间线程去跑其他 agent 的回调。\n\n## 关联概念\n\n- [[IOMultiplexing]] — 事件循环的底层就绪事件来源\n- [[IOModels]] — NIO/Reactor 的延伸形态\n- [[FutureAndPromise]] — 事件循环上组织异步逻辑的抽象(async/await、Promise)\n- [[Goroutine]] — 同目标的不同路线：Go 把多路复用藏进运行时，程序员照写同步代码\n- [[Thread]] — 单线程模型 vs 多线程模型的取舍\n\n## 来源\n\n- [[claude-concurrency-io-session]]\n",
+    "preview": "# 事件循环 (Event Loop) 事件循环 = **一个线程循环消费\"就绪事件队列\"**:I/O 多路复用([[IOMultiplexing]])返回就绪事件后,把对应回调丢进队列,由单线程一个个串行执行([[claude-concurrency-io-session]])。它是\"单线程为什么能扛高并发\"的架构答案。 ## Node.js(libuv)模型",
+    "group": -1,
+    "value": 9
+  },
+  {
+    "id": "concepts/FutureAndPromise",
+    "label": "Future 与 Promise",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\FutureAndPromise.md",
+    "markdown": "---\ntitle: \"Future 与 Promise\"\ntype: concept\ntags: [并发, 异步, Java, JavaScript]\nsources: [claude-concurrency-io-session]\nlast_updated: 2026-09-26\n---\n\n# Future 与 Promise\n\n两者抽象概念相同——都代表\"一个未来才会产生的值\",但**行为语义差很远**,核心差别在\"阻塞 vs 非阻塞\"([[claude-concurrency-io-session]]):\n\n> **Future ≈\"未来值的阻塞句柄\";Promise ≈\"未来值的回调协议\"。** 前者问\"现在好了没?没好我原地等着\";后者说\"好了叫我\"。\n\n## 关键差别\n\n| | `Future.get()` | `Promise.then()` |\n|---|---|---|\n| 语义 | **阻塞**:线程挂起等结果 | **非阻塞**:注册回调,立刻返回 |\n| 组合/链式 | 没有 | `.then().then().catch()` |\n| 错误处理 | 抛 `ExecutionException` 手动拆 | 自动沿链传播到 `.catch()` |\n| 取消 | `cancel()` | 标准没有(靠 `AbortController`) |\n| 多任务编排 | 手动 ExecutorService | `Promise.all/race/allSettled` |\n\n## 真正对应 Promise 的:CompletableFuture\n\n```java\nCompletableFuture.supplyAsync(() -> fetchUser())\n    .thenApply(user -> user.name)              // ≈ .then(map)\n    .thenCompose(name -> fetchProfile(name))   // ≈ .then(返回 Promise 的 fn)\n    .exceptionally(e -> \"fallback\");           // ≈ .catch()\n```\n\n`thenApply` / `thenCompose` / `exceptionally` 的组合、回调、异常传播能力,原生 `Future` 完全没有。Guava 的 `ListenableFuture` 就是为给 `Future` 补回调能力而出现的——反证原生 Future 之原始。\n\n## 为什么语言间形态不同\n\n- **JS/Node 单线程事件循环**([[EventLoop]]):绝对不能用阻塞的 `get()`——一阻塞整个事件循环冻结。只能用 Promise 这种\"注册回调\"模型。\n- **Java 多线程**:`get()` 阻塞的是一个线程,线程多,阻塞就阻塞,别的线程照跑——所以早期阻塞 Future 也能凑合。\n\n## AIO 语境下的选择\n\nAIO 的 `read()` 支持两种写法:`Future` 版本仍需阻塞 `.get()` 拿结果,反而失去异步意义;`CompletionHandler` 回调才是真正非阻塞、语义上最接近 `Promise.then()` 的写法(见 [[IOModels]])。\n\n## 关联概念\n\n- [[IOModels]] — AIO 的 Future/CompletionHandler 两种接口\n- [[EventLoop]] — Promise 存在的理由:单线程不能阻塞\n- [[Thread]] — 阻塞一个线程在多线程模型里是可接受的代价\n\n## 来源\n\n- [[claude-concurrency-io-session]]\n",
+    "preview": "# Future 与 Promise 两者抽象概念相同——都代表\"一个未来才会产生的值\",但**行为语义差很远**,核心差别在\"阻塞 vs 非阻塞\"([[claude-concurrency-io-session]]): > **Future ≈\"未来值的阻塞句柄\";Promise ≈\"未来值的回调协议\"。** 前者问\"现在好了没?没好我原地等着\";后者说\"好了叫我\"。",
+    "group": -1,
+    "value": 6
+  },
+  {
+    "id": "concepts/Goroutine",
+    "label": "协程与 Goroutine (Coroutine & Goroutine)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Goroutine.md",
+    "markdown": "---\ntitle: \"协程与 Goroutine (Coroutine & Goroutine)\"\ntype: concept\ntags: [并发, Go, 协程, 操作系统]\nsources: [claude-concurrency-io-session]\nlast_updated: 2026-09-28\n---\n\n# 协程与 Goroutine (Coroutine & Goroutine)\n\n**协程是用户态调度的执行流，OS 内核看不见它**——内核只看到一群普通线程在跑，协程的调度完全由语言运行时（用户空间代码）完成。Goroutine 是这一抽象最成熟的工业实现（Go），与 [[EventLoop]]（Node）、虚拟线程（Java 21）同属\"把调度权从内核拿回用户态\"的路线。\n\n## GMP 调度模型\n\n```\n        全局队列(GRQ)\n            │\n   ┌────────┼────────┐\n   P0       P1       P2     ← P = 逻辑处理器，持有本地队列(LRQ, 容量256)\n   │        │        │\n  M0       M1       M2      ← M = OS 线程（内核看得见的实体）\n```\n\n- **G**：协程，初始栈 **2KB**，创建/销毁在用户态完成\n- **M**：OS 线程封装，数量动态伸缩\n- **P**：调度上下文，数量 = `GOMAXPROCS`（默认 CPU 核数），决定最大并行度（[[ConcurrencyAndParallelism]]）\n\n调度策略：**work stealing**——队列空了的 P 从其他 P 的本地队列偷一半 G，或从全局队列取。内核调度器在进程层面做的事，被运行时在用户态重做了一遍。\n\n## 四大机制\n\n**1. 动态栈**：初始 2KB，函数序言检查栈空间，不够则 `morestack` 分配更大栈并拷贝（Go 1.3 起连续栈）。对比 [[Thread]] 的 1MB 固定栈——单机百万级 goroutine 内存可行，同等线程数量光栈就要 ~1TB。\n\n**2. 用户态切换**：只保存/恢复几个寄存器 + 栈指针 + g 指针，不陷入内核，~100ns 以内；线程切换 ~μs 级（[[ContextSwitch]]）。比一次系统调用的\"陷入/返回\"（[[UserModeVsKernelMode]]）还轻。\n\n**3. 阻塞的三条出路**（没有一种浪费 M）：\n\n| 阻塞类型 | 处理 | M 状态 |\n|---|---|---|\n| channel/mutex/sleep | `gopark` 挂入运行时等待队列（用户态记账） | 继续跑别的 G |\n| 网络 I/O | 底层走 **netpoller**（epoll/kqueue/IOCP，见 [[IOMultiplexing]]），就绪后唤醒回队列 | 继续跑别的 G |\n| 系统调用 | G 与 M 一起陷入，但 P **hand off** 给空闲 M | 换绑继续 |\n\n**4. 同步阻塞的魔法**：`http.Get(...)` 这类代码看起来阻塞，运行时就把它变成 epoll 多路复用——写同步代码享受 NIO 性能（[[IOModels]]）。Java 21 虚拟线程同理（mount/unmount carrier 线程）。\n\n## 在用户/内核边界上的优化\n\n协程没有消除 [[AddressSpaceLayout]] 的边界，但把过边界的频率和代价压到最低：\n\n| 动作 | 线程模型 | 协程模型 | 边界 crossings |\n|---|---|---|---|\n| 调度决策 | 内核调度器 | 用户态 GMP | **消除** |\n| 切换 | ~μs，内核参与 | ~100ns，纯用户态 | **消除** |\n| 网络 I/O 等待 | 每线程睡内核等待队列 | G 用户态挂起，netpoller 批量轮询 | N 个线程 → ~核数个 |\n| 阻塞 syscall | 整个线程进去 | M 进去，P 换绑隔离 | 次数不减，代价隔离 |\n| 用户↔内核数据拷贝 | 每次 I/O 一次 | 仍在（零拷贝是另一门技术） | **未消除** |\n\n清醒剂：协程优化的是**控制和等待**，不是**数据通路**；拷贝要靠 zero-copy，与协程正交。\n\n## 与线程对比\n\n| 维度 | 线程（OS） | goroutine |\n|---|---|---|\n| 调度者 | 内核 | 用户态运行时 |\n| 栈 | 固定 ~1MB | 2KB 起步动态增长 |\n| 单机量级 | 几千~几万 | 百万级 |\n| 切换 | ~μs，陷内核 | ~100ns，用户态 |\n| 阻塞代价 | 线程整体让出 | G 挂起，M 照跑 |\n| 同步需求 | 共享内存加锁 | **一样要**（channel/mutex/atomic） |\n\n最后一条是常见误解：\"go 关键字一开就线程安全\"是错的——[[Thread]] 的共享数据需 [[Semaphore]] 保护，对 goroutine 完全成立。\n\n## 抽象定位\n\n在 [[thread-essence]] 的阶梯上：`协程 = 现场`（调度权在用户）→ `线程 = 现场 + 内核调度` → `进程 = 现场 + 资源 + 调度`。goroutine 是\"协程\"层的标准答案。\n\n## 关联概念\n\n- [[AddressSpaceLayout]] — 协程优化的那个\"边界\"本身\n- [[IOMultiplexing]] — netpoller 的 epoll 底牌\n- [[EventLoop]] / [[IOModels]] — 同目标的不同路线（Node 把异步暴露给程序员）\n- [[Thread]] / [[Process]] / [[ContextSwitch]]\n\n## 来源\n\n- 由 query 工作流提炼（Go 运行时机制 + 知识库并发主线的延伸）\n",
+    "preview": "# 协程与 Goroutine (Coroutine & Goroutine) **协程是用户态调度的执行流，OS 内核看不见它**——内核只看到一群普通线程在跑，协程的调度完全由语言运行时（用户空间代码）完成。Goroutine 是这一抽象最成熟的工业实现（Go），与 [[EventLoop]]（Node）、虚拟线程（Java 21）同属\"把调度权从内核拿回用户态\"的路线。 ## GMP 调度模型",
+    "group": -1,
+    "value": 14
+  },
+  {
+    "id": "concepts/IOModels",
+    "label": "IO 模型 (BIO / NIO / AIO)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\IOModels.md",
+    "markdown": "---\ntitle: \"IO 模型 (BIO / NIO / AIO)\"\ntype: concept\ntags: [IO, 并发, Java, 操作系统]\nsources: [claude-concurrency-io-session]\nlast_updated: 2026-09-26\n---\n\n# IO 模型 (BIO / NIO / AIO)\n\nBIO / NIO / AIO 是 Java 中三种 I/O 模型(也是操作系统 I/O 模型的分层)。理解它们的关键是先立住两个**正交**的维度,很多人把这两维混在一起,导致 NIO 和 AIO 分不清([[claude-concurrency-io-session]])。\n\n## 两个正交维度\n\n| 维度 | 问的是 | 关键区别 |\n|---|---|---|\n| **阻塞 / 非阻塞** | \"调用后,线程能不能先去干别的?\" | 阻塞 = 线程被挂起必须等;非阻塞 = 立即返回 |\n| **同步 / 异步** | \"数据从内核拷到用户空间,这一步谁来做?\" | 同步 = 应用自己调 read() 主动拷;异步 = 操作系统拷好再通知 |\n\n## 三种模型对比\n\n| 模型 | 阻塞/非阻塞 | 同步/异步 | 一句话 | 模式 |\n|---|---|---|---|---|\n| **BIO** | 阻塞 | 同步 | 一直等,数据到了才返回 | — |\n| **NIO** | 非阻塞 | **同步** | 先问\"好了吗\",好了你再亲自去拿 | Reactor |\n| **AIO** | 非阻塞 | 异步 | 留个回调,内核拷好数据通知你 | Proactor |\n\n> 关键认知:**NIO 是\"非阻塞\"的,但仍然是\"同步\"的**——它只是\"不用傻等\",数据搬运那一步还是应用自己 read() 完成的。AIO 才把拷贝也交给内核。\n\n## BIO:同步阻塞\n\n一个连接占用一个线程,线程在 `read()` 上挂起直到有数据。逻辑简单、执行流线性好调试;但**伸缩性差**——线程占内存(默认 1MB 栈)、切换开销大,大量线程其实在空等 I/O。这是 **C10K 问题**的根源。典型场景:早期 Tomcat、JDBC 驱动。\n\n## NIO:同步非阻塞\n\n核心武器是 **Selector 多路复用**([[IOMultiplexing]]):一个线程 + 一个 Selector 同时监听成千上万个 Channel,`select()` 返回哪些通道就绪,线程只对就绪的 `read()`。底层对应 OS 的 select/poll/**epoll**(Linux),即 Reactor 模式。典型场景:Netty、Tomcat NIO Connector、Kafka 客户端。\n\n## AIO:异步非阻塞\n\n发起请求后立即返回,操作系统负责把数据从内核拷到用户缓冲区,完成后回调通知(`CompletionHandler`)或返回 `Future`([[FutureAndPromise]]),应用线程从头到尾不参与搬运。典型场景:`AsynchronousFileChannel` 等。\n\n**实现细节**:Windows 的 IOCP 是真正的内核级异步;**Linux 上 JDK 的 AIO 长期用 epoll + 线程池\"模拟\"**(见 [[EventLoop]]),数据拷贝仍由池线程同步执行——这是 AIO 在 Linux 上性能优势不明显、普及度不如 NIO 的原因之一。真正内核级异步是近年的 **`io_uring`**。\n\n## 电话类比\n\n| | 你等一个电话 |\n|---|---|\n| BIO | 拿起电话一直听,期间啥也不干 |\n| NIO | 雇个秘书(Selector)同时盯 N 个电话,哪个响了叫你,你再过去接 |\n| AIO | 留个号码,对方打来转接,还帮你把话抄好送到手上 |\n\n## 与线程模型的关系\n\n- BIO 的\"一连接一线程\"让 [[Thread]] 成为瓶颈,倒逼出多路复用与异步。\n- 单线程事件循环([[EventLoop]])本质就是 NIO/Reactor 思想的延伸:一个线程发起 N 个网络请求,谁的数据回来了处理谁的回调——这就是\"单线程为什么能扛高并发\"的底层逻辑。\n- Java 21 虚拟线程(Project Loom)用调度器 + epoll 把虚拟线程映射到少量真实线程,让阻塞式代码重获高并发能力。\n\n## 来源\n\n- [[claude-concurrency-io-session]]\n",
+    "preview": "# IO 模型 (BIO / NIO / AIO) BIO / NIO / AIO 是 Java 中三种 I/O 模型(也是操作系统 I/O 模型的分层)。理解它们的关键是先立住两个**正交**的维度,很多人把这两维混在一起,导致 NIO 和 AIO 分不清([[claude-concurrency-io-session]])。 ## 两个正交维度",
+    "group": -1,
+    "value": 12
+  },
+  {
+    "id": "concepts/IOMultiplexing",
+    "label": "IO 多路复用 (I/O Multiplexing)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\IOMultiplexing.md",
+    "markdown": "---\ntitle: \"IO 多路复用 (I/O Multiplexing)\"\ntype: concept\ntags: [IO, 多路复用, epoll, 操作系统, 并发]\nsources: [claude-concurrency-io-session]\nlast_updated: 2026-09-26\n---\n\n# IO 多路复用 (I/O Multiplexing)\n\n多路复用一句话点破:**\"阻塞\"本身没错,错的是\"每个连接都占一个线程去阻塞\"。多路复用让一个线程一次性阻塞在很多个连接上,哪个有数据了内核就叫醒它,它再单独处理那个**([[claude-concurrency-io-session]])。\n\n## 1. 线程 read() 阻塞时内核发生了什么\n\n线程调 `read(fd)` 进入内核([[UserModeVsKernelMode]]):socket 接收缓冲区**有数据**→ 拷贝返回;**没数据** → 内核把该线程挂到该 fd 的**等待队列(wait queue)**,切换到别的线程。数据到达后内核去等待队列唤醒线程。\n\n**每个 socket 都有一个等待队列,挂着正在等它的线程。**\n\n## 2. BIO 的浪费\n\n一万个连接 → 一万个线程,每个挂在一个 fd 上等。线程 99% 时间在睡觉,却每个都占内存(栈)、参与调度——这就是 C10K 问题:**线程不够用、调度不过来**。\n\n## 3. 非阻塞的坑:忙轮询\n\n`O_NONBLOCK` 下 `read()` 没数据立即返回(EAGAIN),线程不睡——但得不停\"问\",CPU 空转 100%,比阻塞还浪费。**非阻塞单独用时的死穴:把\"睡觉等待\"换成\"疯狂空转\"。**\n\n## 4. 关键洞察\n\n让内核提供一种能力:**一个线程,一次调用,同时等待 N 个 fd,任何一个就绪就返回并告诉你是哪些。** 模型对比:\n\n- BIO:**10000 个线程**,每个挂在一个 fd 上等\n- 多路复用:**1 个线程**,挂在 10000 个 fd 上等\n\n\"多路复用\"四字拆开:**多路**(很多连接)**复用**(共用一个线程、一次等待)。\n\n## 5. 内核实现:epoll_wait 与等待队列\n\n`epoll_wait()` 执行时:内核把当前这一个线程同时登记到所有监听 fd 的等待队列 → 线程睡眠 → 某 fd 有数据,内核唤醒该线程并标记就绪 → `epoll_wait` 返回就绪列表 → 线程只对就绪 fd `read()`(数据已在,立即返回不阻塞)。**一次 sleep 覆盖所有 fd,一次唤醒精确告知谁就绪。**\n\n## 6. select / poll / epoll 对比\n\n| | select | poll | epoll |\n|---|---|---|---|\n| 找\"谁就绪\" | 内核遍历全部 fd,O(n) | 同左 O(n) | 维护**就绪链表**,直接取 O(1) |\n| fd 集合传递 | `fd_set` 每次整份拷进内核 | 数组,每次拷 | `epoll_ctl` **只注册一次** |\n| fd 上限 | 默认 1024 | 无上限(性能仍 O(n)) | 无上限 |\n\nepoll 快的两个关键:**注册一次永久有效**(红黑树管理监听集合);**就绪链表 + 回调**(fd 就绪即经回调挂入链表,`epoll_wait` 直接取回,不遍历)。\n\n## 7. 餐厅类比\n\nBIO = 每桌配一个服务员站桌边等点菜;非阻塞轮询 = 一个服务员绕 100 桌狂奔挨个问;多路复用 = 每桌一个**按铃**,一个服务员坐前台,哪桌按铃才过去服务。select/poll 是没有按铃、定期全店扫一遍;epoll 是装了按铃直接知道哪桌。\n\n## 关联概念\n\n- [[IOModels]] — 多路复用是 NIO 的核心机制\n- [[EventLoop]] — 事件循环把 epoll 再包一层:就绪事件入队,单线程串行执行回调\n- [[Goroutine]] — Go 的 netpoller 直接复用本页这套 epoll 机制,让协程\"阻塞却不占线程\"\n- [[Socket]] — epoll 监听的 fd 主要就是 socket\n- [[Thread]] — 用 1 个线程替代 N 个阻塞线程的关键\n\n## 来源\n\n- [[claude-concurrency-io-session]]\n",
+    "preview": "# IO 多路复用 (I/O Multiplexing) 多路复用一句话点破:**\"阻塞\"本身没错,错的是\"每个连接都占一个线程去阻塞\"。多路复用让一个线程一次性阻塞在很多个连接上,哪个有数据了内核就叫醒它,它再单独处理那个**([[claude-concurrency-io-session]])。 ## 1. 线程 read() 阻塞时内核发生了什么",
+    "group": -1,
+    "value": 11
+  },
+  {
+    "id": "concepts/IPC",
+    "label": "进程通信 (IPC)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\IPC.md",
+    "markdown": "---\ntitle: \"进程通信 (IPC)\"\ntype: concept\ntags: [操作系统, 进程通信, IPC]\nsources: [six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 进程通信 (IPC, InterProcess Communication)\n\n**IPC 是进程之间的信息交换。** 由于每个 [[Process]] 的用户地址空间相互独立、不能直接互访，而内核空间为所有进程共享，因此**进程间通信必须经由内核**（[[six-ipc-mechanisms]]）。\n\n## 低级通信 vs 高级通信\n\n进程同步与互斥本质上也是一种通信——它通过修改信号量使进程建立联系、相互协调，但只传信号量、缺乏传递数据的能力，称为**低级通信**。需要交换大批数据（一批信息或整个文件）时，需使用真正的通信机制（高级通信）。\n\n## Linux 六大通信机制\n\n| 机制 | 本质 | 特点 |\n|---|---|---|\n| [[Pipe]] | 内核内存中的缓冲区（特殊文件） | 半双工字节流；匿名管道限父子进程 |\n| [[MessageQueue]] | 内存中消息的链表 | 按类型随机查询；读写需用户态↔内核态拷贝 |\n| [[SharedMemory]] | 两进程页表映射到同一物理区域 | 最快，但需配合同步 |\n| [[Semaphore]] | 表示资源数量的变量 + PV 原语 | 低级通信；解决共享内存的冲突 |\n| [[Signal]] | 异步事件通知 | 唯一异步机制；与信号量完全不同 |\n| [[Socket]] | 封装 TCP/IP 的编程接口 | 唯一能跨网络的机制 |\n\n## 演进逻辑\n\n管道（简单但低效、无格式）→ 消息队列（有格式但拷贝开销大）→ 共享内存（零拷贝最快但会冲突）→ 信号量/PV（为共享内存提供互斥与同步）→ 信号（异步通知）→ Socket（跨网络）。\n\n## 关联概念\n\n- [[Process]]：通信主体；[[Thread]] 因共享地址空间反而无需 IPC\n- [[ConcurrencyAndParallelism]]：进程异步推进是同步机制存在的背景\n",
+    "preview": "# 进程通信 (IPC, InterProcess Communication) **IPC 是进程之间的信息交换。** 由于每个 [[Process]] 的用户地址空间相互独立、不能直接互访，而内核空间为所有进程共享，因此**进程间通信必须经由内核**（[[six-ipc-mechanisms]]）。 ## 低级通信 vs 高级通信",
+    "group": -1,
+    "value": 15
+  },
+  {
+    "id": "concepts/JavaMemoryModel",
+    "label": "Java 内存模型 (JMM)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\JavaMemoryModel.md",
+    "markdown": "---\ntitle: \"Java 内存模型 (JMM)\"\ntype: concept\ntags: [Java, 并发, 内存模型, JMM]\nsources: [java-memory-and-jmm]\nlast_updated: 2026-09-28\n---\n\n# Java 内存模型 (JMM)\n\n**JMM 是 Java 语言规范定义的并发内存访问协议,不是真实的内存划分。** 它屏蔽硬件差异,规定多线程环境下共享变量何时可见、指令能否重排([[java-memory-and-jmm]])。\n\n## 核心抽象：主内存 + 工作内存\n\n- **主内存(Main Memory)**:所有共享变量存于此,线程均可访问 ≈ 物理内存 ≈ JVM 堆中的实例域/静态域/数组元素\n- **工作内存(Working Memory)**:每线程私有,存共享变量的**副本**——**是抽象概念,涵盖高速缓存、写缓冲区、寄存器**\n- **操作规则**:线程对变量的所有操作必须在工作内存进行,不能直接读写主内存;线程间传值必须经主内存\n\n线程间通信两步:线程 A 把工作内存中更新后的变量**刷新到主内存** → 线程 B 从主内存**读取**并同步进自己的工作内存。\n\n> 注意:局部变量/方法参数在线程栈中(线程私有),**无可见性问题**;可见性问题只针对堆中的共享变量。\n\n## 为什么需要这个抽象\n\n硬件真相(见 [[thread-essence]] 硬件层):**每个 CPU 核有自己独立的 L1/L2 缓存和写缓冲**。线程改共享变量,新值可能只停在它所在核的缓存里没写回内存,另一核上的线程读到旧值——这就是**可见性问题**。JMM 若在规范里写死\"缓存\"就绑定了具体硬件,于是用与平台无关的\"工作内存\"来定义规则。\n\n根源一句话:**可见性的原因是缓存,有序性的原因是编译优化**。\n\n## 三大问题与解决手段\n\n| 问题 | 根源 | JMM 手段 |\n|---|---|---|\n| 可见性 | CPU 缓存/写缓冲 | `volatile`、锁、`final` |\n| 有序性 | 编译器/处理器重排序 | 内存屏障 + happens-before 约束 |\n| 原子性 | 复合操作中途被切走 | `synchronized`/锁(监视器) |\n\n重排序三类:编译器优化重排序、指令级并行重排序、内存系统重排序;约束=单线程 as-if-serial + 数据依赖禁止重排 + 多线程插内存屏障。\n\n## happens-before 八条\n\n1. **程序次序**:同线程内前面的操作 hb 于后面的操作\n2. **监视器锁**:解锁 hb 于后续对同一锁的加锁([[Semaphore]] 的规范层依据)\n3. **volatile**:写 hb 于后面对该变量的读\n4. **传递性**:A hb B,B hb C → A hb C\n5. **start()**:`ThreadB.start()` hb 于 B 中的任意操作\n6. **join()**:B 内任意操作 hb 于 A 从 `join()` 返回\n7. **中断**:`interrupt()` 调用 hb 于被中断线程检测到中断\n8. **对象终结**:构造完成 hb 于 `finalize()` 开始\n\n## 三层视角定位\n\n```\nJMM 主内存   ≈ 物理内存 ≈ JVM 堆中的共享变量([[JvmRuntimeMemory]])\nJMM 工作内存 ≈ CPU 缓存 + 写缓冲 + 寄存器([[thread-essence]] 硬件层)\n\"刷新到主内存\" = 缓存一致性动作,不是把数据拷到另一块空间\n```\n\n常见误解:画着\"每线程一块工作内存\"的 JMM 图**不是**地址空间划分——物理上所有线程共享同一地址空间([[AddressSpaceLayout]]),工作内存是缓存系统的问题域抽象。\n\n## 关联概念\n\n- [[JVM]] — JMM 的定义者：JVM 是进程内的语言运行时\n- [[JvmRuntimeMemory]] — JMM 之下的真实内存布局\n- [[AddressSpaceLayout]] — 更底层的 OS 视角\n- [[Thread]] — 共享五类资源 = JMM 的共享变量\n- [[Semaphore]] — 锁机制在规范层的对应物\n\n## 来源\n\n- [[java-memory-and-jmm]]\n",
+    "preview": "# Java 内存模型 (JMM) **JMM 是 Java 语言规范定义的并发内存访问协议,不是真实的内存划分。** 它屏蔽硬件差异,规定多线程环境下共享变量何时可见、指令能否重排([[java-memory-and-jmm]])。 ## 核心抽象：主内存 + 工作内存",
+    "group": -1,
+    "value": 10
+  },
+  {
+    "id": "concepts/JVM",
+    "label": "Java 虚拟机 (JVM)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\JVM.md",
+    "markdown": "---\ntitle: \"Java 虚拟机 (JVM)\"\ntype: concept\ntags: [JVM, Java, 运行时]\nsources: [java-memory-and-jmm]\nlast_updated: 2026-09-28\n---\n\n# Java 虚拟机 (JVM)\n\n**JVM = 一套规范(JVMS) + 一个实现(如 HotSpot),本质上是一个执行字节码的用户态程序。** \"虚拟\"指虚拟出一套计算机架构(字节码指令集、虚拟内存区域、垃圾回收),让 Java 字节码跨平台运行——不是 VMware/VirtualBox 那种硬件虚拟机。\n\n## 不是什么 / 是什么\n\n| | 硬件虚拟机(VMware/VirtualBox) | JVM |\n|---|---|---|\n| 虚拟的对象 | 整台电脑(硬件) | 一套计算机架构(指令集 + 运行时) |\n| 运行载体 | 宿主机上的进程,里面跑客户 OS | 宿主机上的一个普通进程 |\n| 客户 | 整个操作系统 | 一门语言的字节码 |\n| \"跨平台\"的含义 | 不同硬件的机器代码 | \"一次编译,到处运行\" |\n\n## 启动过程：Java 程序 = 一个普通 OS 进程\n\n`java Hello` → OS fork/exec 创建普通进程 → java 启动器(小 C 程序)加载 `libjvm.so` → JVM 启动(Bootstrap ClassLoader → 加载 `Hello.class` → 执行 `main`)。\n\n- **JVM 不是独立进程**，以动态库形式住在你的进程里——不是\"JVM 进程 + 程序进程\"两个东西\n- 一个 Java 程序 = 一个 OS 进程 = 一个 JVM 实例；跑多个 Java 程序就是多个进程、多套互不知晓的 JVM\n- **JVM 里的 Java 线程 ≈ OS 线程**(HotSpot 1:1 映射)——[[Thread]] 的三类私有资源、[[ContextSwitch]] 的切换开销对 Java 线程全部成立\n- JNI/native 方法在同一进程内以原生机器码直接执行\n\n## 三大子系统\n\n1. **类加载器(ClassLoader)**:加载 `.class` → 链接(验证/准备/解析)→ 初始化；Bootstrap/Extension/Application 三层委派模型\n2. **执行引擎**:解释器逐条执行字节码 + **JIT**(热点代码编译成本地机器码，代码缓存存于方法区，见 [[JvmRuntimeMemory]])\n3. **垃圾回收器(GC)**:自动管理堆(分代收集：新生代/老年代);`System.gc()` 只是建议\n\n## 两层视图：JVM 是\"租户\",OS 用户空间是\"房子\"\n\n- OS 只认一个进程、一套页表、两半空间([[AddressSpaceLayout]]);JVM 的堆/方法区/虚拟机栈是对**自己那半用户空间**的逻辑细分，OS 不知道这些区域的存在\n- JVM 用 `mmap`/`malloc` 向内核申请内存(系统调用，[[UserModeVsKernelMode]]);内核空间那半 JVM 同样无权直碰\n- 层级栈：**OS 两半空间 → JVM 运行时数据区([[JvmRuntimeMemory]]) → JMM 并发规范([[JavaMemoryModel]])**——越往上越抽象，最底层都是物理内存与页表\n\n## 关联概念\n\n- [[JvmRuntimeMemory]] — JVM 管理的运行时数据区(房间布局)\n- [[JavaMemoryModel]] — 房间之上的使用规则\n- [[AddressSpaceLayout]] — JVM 所建房子的 OS 地基\n- [[Process]] — JVM 实例的容器；[[Thread]] — Java 线程即 OS 线程\n- [[IOModels]] — NIO 直接内存是 JVM 绕过堆向 OS 直接申请的部分\n\n## 来源\n\n- [[java-memory-and-jmm]] + query 工作流提炼\n",
+    "preview": "# Java 虚拟机 (JVM) **JVM = 一套规范(JVMS) + 一个实现(如 HotSpot),本质上是一个执行字节码的用户态程序。** \"虚拟\"指虚拟出一套计算机架构(字节码指令集、虚拟内存区域、垃圾回收),让 Java 字节码跨平台运行——不是 VMware/VirtualBox 那种硬件虚拟机。 ## 不是什么 / 是什么",
+    "group": -1,
+    "value": 11
+  },
+  {
+    "id": "concepts/JvmRuntimeMemory",
+    "label": "JVM 运行时数据区 (Java 内存结构)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\JvmRuntimeMemory.md",
+    "markdown": "---\ntitle: \"JVM 运行时数据区 (Java 内存结构)\"\ntype: concept\ntags: [JVM, Java, 内存]\nsources: [java-memory-and-jmm]\nlast_updated: 2026-09-28\n---\n\n# JVM 运行时数据区 (Java 内存结构)\n\n**Java 内存结构 = JVM 对自己那份用户空间的逻辑分区。** 按线程访问特性分两类([[java-memory-and-jmm]]):\n\n```\n┌─ 线程共享区(生命周期与 JVM 一致)─────────────┐\n│ 堆 Heap:对象实例/数组,GC 主战场(-Xmx/-Xms)     │\n│ 方法区:类元信息/常量/静态变量/JIT 代码缓存       │\n│   └ 运行时常量池(Class 常量池→符号解析→直接引用) │\n└──────────────────────────────────────────┘\n┌─ 线程隔离区(生命周期与线程一致)────────────────┐\n│ 虚拟机栈:栈帧(局部变量表/操作数栈/动态连接/出口) │\n│ 程序计数器:字节码行号指示器,唯一无 OOM 区域      │\n│ 本地方法栈:Native 方法服务(HotSpot 与虚拟机栈合一)│\n└──────────────────────────────────────────┘\n```\n\n## 关键事实\n\n- **虚拟机栈**:每线程一个,栈帧随方法调用入栈/出栈;深度超限抛 `StackOverflowError`;不同线程的栈帧禁止互相引用\n- **程序计数器**:字节码行号指示器(**注意是逻辑 PC,非硬件 PC**),线程切换后靠它恢复执行——对应 [[thread-essence]] 硬件层的 PC,但作用域是字节码\n- **堆**:逻辑上方法区是它的\"一部分\"(规范定义),物理上两者分开(方法区别名 Non-Heap);逻辑连续即可,物理可不连续\n- **方法区实现演进**:Java 7 及之前 = 永久代(PermGen,在物理堆内);Java 8 起 = **元空间(Metaspace,移入本地内存)**,静态变量与字符串常量池随之移入物理堆\n- **直接内存**:NIO 的 `DirectByteBuffer` 引用堆外内存,避免 Java 堆↔Native 堆的来回复制\n- **内存总账**:Java 程序内存 = JVM 内存 + 本地内存;本地内存 = 元空间 + 直接内存\n\n## 与 OS 层的映射\n\nJVM 结构层与 [[AddressSpaceLayout]] 完全同构,只是更细:\n\n| JVM 层 | OS 层 |\n|---|---|\n| 虚拟机栈(每线程) | 每线程一块用户栈(1MB `-Xss`,mmap + guard page) |\n| 程序计数器 | 硬件 PC 的字节码版 |\n| 堆 + 方法区 | 共享的用户空间(数据区 + 堆) |\n| 元空间/直接内存 | 用户空间中向 OS 直接 malloc 的部分 |\n\n方法区/元空间始终**在进程用户空间内**——无论实现怎么演进,都不出 [[AddressSpaceLayout]] 画的那张图。\n\n## 关联概念\n\n- [[JVM]] — 运行时数据区的管理者：JVM 是进程内的语言运行时\n- [[JavaMemoryModel]] — JMM 在这套布局之上再叠一层并发访问规范\n- [[AddressSpaceLayout]] — 底层地址空间视角;[[Process]] — 进程是这一切的容器\n- [[Thread]] — 线程私有栈/共享堆在 JVM 语境的具体形态\n- [[IOModels]] — NIO 直接内存是该文 IO 体系的性能优化点\n\n## 来源\n\n- [[java-memory-and-jmm]]\n",
+    "preview": "# JVM 运行时数据区 (Java 内存结构) **Java 内存结构 = JVM 对自己那份用户空间的逻辑分区。** 按线程访问特性分两类([[java-memory-and-jmm]]): ```",
+    "group": -1,
+    "value": 10
+  },
+  {
+    "id": "concepts/MCPPrompt",
+    "label": "MCP 提示词 (Prompts)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\MCPPrompt.md",
+    "markdown": "---\ntitle: \"MCP 提示词 (Prompts)\"\ntype: concept\ntags: [MCP, AI, 提示词]\nsources: [mcp-explained]\nlast_updated: 2026-09-26\n---\n\n# MCP 提示词 (Prompts)\n\nPrompts 是 [[ModelContextProtocol]] 中用于规范 AI 模型行为和任务执行流程的标准化模板。作用是为模型提供明确的指令和上下文格式,使模型按预期方式组织信息、调用[[MCPResource|资源]]和[[MCPTool|工具]]并生成结构化输出——模型不仅知道**要做什么**,还知道**如何做**。\n\n## 字段规范\n\n- **Prompt ID/名称**:唯一标识,便于复用和调用,例如 `prompt://code_review`、`prompt://generate_summary`\n- **描述(Description)**:用途和适用场景\n- **输入要求(Input Schema)**:执行任务所需的数据格式或上下文,例如需要引用哪些 Resources\n- **输出格式(Output Schema)**:结果结构(JSON、Markdown、列表、文本块),便于后续工具调用或系统处理\n- **默认行为或模板指令**:具体提示词文本/模板,可含占位符(如 `{resource_content}`、`{user_question}`),**运行时由 MCP Client 填充实际数据**\n\n## 示例\n\n```json\n{\n  \"id\": \"prompt://code_review\",\n  \"description\": \"对源代码文件进行审查,输出问题和改进建议\",\n  \"input_schema\": {\n    \"resources\": [\"resource://filesystem/src/main.py\"],\n    \"user_prompt\": \"string\"\n  },\n  \"output_schema\": { \"issues\": \"list\", \"suggestions\": \"list\" },\n  \"template\": \"请阅读以下代码文件内容:{resource_content}。基于最佳实践指出潜在问题,并提出改进建议。\"\n}\n```\n\n## 来源\n\n- [[mcp-explained]]\n",
+    "preview": "# MCP 提示词 (Prompts) Prompts 是 [[ModelContextProtocol]] 中用于规范 AI 模型行为和任务执行流程的标准化模板。作用是为模型提供明确的指令和上下文格式,使模型按预期方式组织信息、调用[[MCPResource|资源]]和[[MCPTool|工具]]并生成结构化输出——模型不仅知道**要做什么**,还知道**如何做**。 ## 字段规范",
+    "group": -1,
+    "value": 4
+  },
+  {
+    "id": "concepts/MCPResource",
+    "label": "MCP 资源 (Resources)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\MCPResource.md",
+    "markdown": "---\ntitle: \"MCP 资源 (Resources)\"\ntype: concept\ntags: [MCP, AI, 上下文]\nsources: [mcp-explained]\nlast_updated: 2026-09-26\n---\n\n# MCP 资源 (Resources)\n\nResources 是 [[ModelContextProtocol]] 中向模型提供上下文数据的组件,本质是可访问的静态/动态数据:本地文件、代码仓库、文档知识库、数据库表、配置文件、API 返回数据等。核心特点是**\"只提供数据,不执行操作\"**——不直接改变系统状态,仅为模型补充上下文(区别于可执行的 [[MCPTool]])。\n\n## 资源标识(URI)\n\n每个资源有唯一 URI 定位:\n\n```\nresource://<provider>/<path>\n\n# 示例\nresource://filesystem/src/main.py\nresource://docs/project_guide\nresource://database/orders\n```\n\n- `provider`:资源提供方或来源类型(filesystem、docs、database)\n- `path`:资源在该提供方下的具体路径或标识\n\n## 元数据(Metadata)\n\n描述资源属性与用途,服务于权限控制、审计与访问策略优化:名称(name)、大小(size)、类型(text/code/数据库表/日志/API)、访问权限(permissions)、创建/修改时间(created_at/updated_at)、描述信息(description)。\n\n## 资源内容(Content)\n\nResource 的核心部分。Client 请求资源时,Server 返回内容并加入模型上下文,模型基于数据推理(如读取 `resource://filesystem/src/main.py` 后给出代码解释或修改建议)。\n\n## 访问控制(Access Control)\n\n- permissions:read-only、restricted 等\n- visibility:public 或 private\n- allowed_roles:允许访问的用户角色\n\n## 来源\n\n- [[mcp-explained]]\n",
+    "preview": "# MCP 资源 (Resources) Resources 是 [[ModelContextProtocol]] 中向模型提供上下文数据的组件,本质是可访问的静态/动态数据:本地文件、代码仓库、文档知识库、数据库表、配置文件、API 返回数据等。核心特点是**\"只提供数据,不执行操作\"**——不直接改变系统状态,仅为模型补充上下文(区别于可执行的 [[MCPTool]])。 ## 资源标识(URI)",
+    "group": -1,
+    "value": 5
+  },
+  {
+    "id": "concepts/MCPTool",
+    "label": "MCP 工具 (Tools)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\MCPTool.md",
+    "markdown": "---\ntitle: \"MCP 工具 (Tools)\"\ntype: concept\ntags: [MCP, AI, 工具调用]\nsources: [mcp-explained]\nlast_updated: 2026-09-26\n---\n\n# MCP 工具 (Tools)\n\nTools 是 [[ModelContextProtocol]] 中模型可调用的可执行能力模块,类似函数调用(function calling)。AI 在推理过程中通过 Tools 直接与外部系统交互、执行操作、处理数据。Tools 的核心特征是**可执行、会改变系统状态或触发操作**(区别于只读的 [[MCPResource]])。\n\n## 字段规范\n\n一个 Tool 通常包含:\n\n- **工具标识(Tool ID/Name)**:唯一标识,便于模型或 MCP Client 调用,例如 `tool://search_docs`、`tool://run_shell_command`\n- **描述(Description)**:说明工具功能和用途\n- **输入参数(Input Schema)**:输入数据的格式与字段(参数类型、必填项、默认值)\n- **输出结构(Output Schema)**:返回数据格式,便于 Client 整合进模型上下文或后续流程\n- **执行权限和约束(Permissions/Security)**:谁可调用、是否需要额外认证(如限定角色或沙箱环境)\n- **示例调用模板(可选)**:默认调用方式或示例,帮助模型正确构建调用请求\n\n## 与 Resources 的分工\n\nTools 执行操作(有副作用),Resources 只提供数据(无副作用),二者共同构成 AI 可访问的数据与功能集合。LLM 在工作流程的第 4 步(思考选工具)决定调用哪个 Tool 并传入参数。\n\n## 来源\n\n- [[mcp-explained]]\n",
+    "preview": "# MCP 工具 (Tools) Tools 是 [[ModelContextProtocol]] 中模型可调用的可执行能力模块,类似函数调用(function calling)。AI 在推理过程中通过 Tools 直接与外部系统交互、执行操作、处理数据。Tools 的核心特征是**可执行、会改变系统状态或触发操作**(区别于只读的 [[MCPResource]])。 ## 字段规范",
+    "group": -1,
+    "value": 5
+  },
+  {
+    "id": "concepts/MessageQueue",
+    "label": "消息队列 (Message Queue)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\MessageQueue.md",
+    "markdown": "---\ntitle: \"消息队列 (Message Queue)\"\ntype: concept\ntags: [操作系统, IPC, Linux]\nsources: [six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 消息队列 (Message Queue)\n\n消息传递机制，是 [[Pipe]] 的升级版（[[six-ipc-mechanisms]]）。\n\n## 本质\n\n存放在内存中的**消息的链表**，消息本质是用户自定义的数据结构。进程 A 把数据放入队列即可正常返回，进程 B 需要时自行读取；读取后消息即从队列删除。\n\n## 对比管道的优势\n\n- 支持一个或多个进程读写\n- **随机查询**：可按消息类型读取，不必先进先出（优于有名管道 FIFO）\n- **解耦**：写入时无需读进程已在等待（管道则需先有读进程，否则写入无意义）\n- **生命周期随内核**：不释放/不关机就一直存在（匿名管道随进程销毁）\n\n## 局限\n\n读写都要经过**用户态↔内核态的数据拷贝**：写进程从用户态拷入内核，读进程从内核拷回用户态。数据量大时频繁系统调用、内核介入，**速度较慢**——这正是 [[SharedMemory]] 要解决的问题。\n\n## 演进位置\n\n管道（无格式）→ 消息队列（有格式但拷贝开销大）→ 共享内存（零拷贝）。多 CPU 系统上有个反直觉结论：消息传递的性能可能优于 [[SharedMemory]]，因为消息队列无需避免冲突（[[six-ipc-mechanisms]]）。\n\n## 关联概念\n\n- [[IPC]]：六大机制之一；[[Pipe]]：被替代的前代机制\n- [[SharedMemory]]：以零拷贝解决其效率问题\n",
+    "preview": "# 消息队列 (Message Queue) 消息传递机制，是 [[Pipe]] 的升级版（[[six-ipc-mechanisms]]）。 ## 本质",
+    "group": -1,
+    "value": 9
+  },
+  {
+    "id": "concepts/ModelContextProtocol",
+    "label": "模型上下文协议 (Model Context Protocol)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\ModelContextProtocol.md",
+    "markdown": "---\ntitle: \"模型上下文协议 (Model Context Protocol)\"\ntype: concept\ntags: [MCP, AI, 协议, Agent, 工具调用]\nsources: [mcp-explained]\nlast_updated: 2026-09-26\n---\n\n# 模型上下文协议 (MCP)\n\nMCP 是由 [[Anthropic]] 推出的开放协议,用于连接大型语言模型与外部工具、数据源和应用系统。它为 AI 模型提供标准化的方式来获取上下文信息并执行实际操作,开发者可将文件系统、数据库、API、企业系统封装为\"可调用资源\"。常被类比为\"AI 应用程序的 USB-C 接口\"——为模型与外设(工具/数据)提供统一连接标准。\n\n## 架构:客户端-服务器\n\nMCP 采用分布式客户端-服务器架构,通信涉及三个角色([[mcp-explained]]):\n\n- **MCP Host**:启动 LLM 连接的应用程序(如 Cursor、Claude Desktop、Cline)。\n- **MCP Client**:运行在 AI 应用/IDE/Agent 中的客户端组件,是 AI 的\"调度与通信层\"——建立连接、发现能力([[MCPTool]]/[[MCPResource]]/[[MCPPrompt]])、把模型的工具调用请求转成协议消息、将结果整合回模型上下文。\n- **MCP Server**:能力网关,向 Client 暴露资源和工具,收到请求后执行具体操作(读文件、查数据库、调 API、运行命令),内部含工具注册、资源管理、执行引擎与安全控制模块。\n\n## 三大核心原语\n\n- [[MCPTool]] — 可执行能力模块,类似函数调用,会改变系统状态。\n- [[MCPResource]] — 只读数据资源,只提供上下文,不执行操作。\n- [[MCPPrompt]] — 标准化任务模板,规范模型行为与任务流程。\n\nTools 与 Resources 共同构成 AI 可访问的数据与功能集合。\n\n## 工作流程(七步)\n\n1. 客户端与服务器建立连接\n2. 双方确认沟通规则(协商)\n3. 客户端询问可用工具/资源/提示,服务器返回能力清单\n4. LLM 接受用户请求后思考,决定用哪个工具并传参\n5. 客户端把请求转换为标准格式(JSON-RPC)发给服务器\n6. 服务器调用外部系统执行操作\n7. 结果经服务器→客户端→LLM 逐级回传,上下文更新\n\n## 通信机制\n\n通信协议统一为 **JSON-RPC**,但传输方式有三种:\n\n| 传输方式 | 机制 | 特点 | 现状 |\n|---|---|---|---|\n| STDIO | 父子进程 stdin/stdout 传输 JSON-RPC | 无网络、低延迟、强隔离;要求纯净 JSON 输出不能混入日志;本质是\"本地进程级 RPC 通道\" | 默认、最核心 |\n| SSE | HTTP 单向事件流,服务端持续推送 | 实现简单、天然流式、易穿透防火墙;但单向,需配 REST API 补全请求-响应 | 官方已弃用 |\n| Streamable HTTP | HTTP POST + 可选流式响应 | 兼顾请求-响应与流式输出;易集成认证、网关、负载均衡等云原生设施 | 官方推荐 |\n\n适用场景:STDIO 用于本地工具/插件/开发调试/隐私数据处理;Streamable HTTP 适合远程服务化部署与企业级扩展。\n\n## 与操作系统 IPC 的对应\n\n- STDIO 父子进程通信复用了操作系统[[Pipe]](匿名管道)机制——进程间通信用途在 AI 协议层的实例。\n- SSE/Streamable HTTP 基于网络通信,属于[[Socket]]所覆盖的跨网络进程通信范畴。\n\n## 价值定位\n\nMCP 的价值不在于替代现有架构,而在于解耦模型与工具之间的交互复杂度,使开发者专注业务逻辑而非接口适配与上下文拼接——为构建可扩展、可组合的 AI 应用提供基础设施级支撑。\n\n## 来源\n\n- [[mcp-explained]]\n",
+    "preview": "# 模型上下文协议 (MCP) MCP 是由 [[Anthropic]] 推出的开放协议,用于连接大型语言模型与外部工具、数据源和应用系统。它为 AI 模型提供标准化的方式来获取上下文信息并执行实际操作,开发者可将文件系统、数据库、API、企业系统封装为\"可调用资源\"。常被类比为\"AI 应用程序的 USB-C 接口\"——为模型与外设(工具/数据)提供统一连接标准。 ## 架构:客户端-服务器",
+    "group": -1,
+    "value": 10
+  },
+  {
+    "id": "concepts/Pipe",
+    "label": "管道 (Pipe)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Pipe.md",
+    "markdown": "---\ntitle: \"管道 (Pipe)\"\ntype: concept\ntags: [操作系统, IPC, Linux]\nsources: [six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 管道 (Pipe)\n\n管道也称**共享文件**机制，是 [[IPC]] 中最简单的方式（[[six-ipc-mechanisms]]）。\n\n## 本质\n\n对管道两端的进程而言，管道就是一个文件——但不是普通文件：它不属于任何现有文件系统，而是单独构成一种文件系统，**只存在于内存中**。内核在内存开辟一块与管道文件关联的缓冲区，对管道文件的操作被内核转换为对该缓冲区的操作。管道用环形队列实现，数据从写端流入、读端流出。\n\n## 关键特性\n\n- **半双工**：数据只能单向流动；双向通信需创建两个管道\n- **字节流**：只能传输无格式的字节流\n- **低效**：不适合进程间频繁交换数据\n\n## 两类管道\n\n| | 匿名管道 | 有名管道（FIFO） |\n|---|---|---|\n| 创建 | `pipe(fd[2])`，fd[0] 读端 / fd[1] 写端 | `mkfifo myPipe`（提供路径名） |\n| 使用范围 | 仅限父子进程等亲缘进程 | 任何能访问路径的进程 |\n| 生命周期 | 随进程创建建立、随进程结束销毁 | 随内核存在 |\n\nshell 中的管道符 `command1 | command2` 即匿名管道。经典用法：父进程创建两个管道后 fork，父关 fd1[0]/fd2[1]、子关 fd1[1]/fd2[0]，实现父子双向通信。往有名管道 `echo \"hello\" > myPipe` 会阻塞，直到数据被 `cat < myPipe` 读走。\n\n## 演进位置\n\n因低效、无格式，被 [[MessageQueue]]（有格式、可随机查询）取代其频繁通信场景。\n\n## 关联概念\n\n- [[IPC]]：六大机制之一；[[Process]]：匿名管道依赖父子关系\n- [[Socket]]：同样可做进程间通信但面向网络场景\n",
+    "preview": "# 管道 (Pipe) 管道也称**共享文件**机制，是 [[IPC]] 中最简单的方式（[[six-ipc-mechanisms]]）。 ## 本质",
+    "group": -1,
+    "value": 12
+  },
+  {
+    "id": "concepts/Process",
+    "label": "进程 (Process)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Process.md",
+    "markdown": "---\ntitle: \"进程 (Process)\"\ntype: concept\ntags: [操作系统, 进程]\nsources: [process-vs-thread, six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 进程 (Process)\n\n**进程是程序在专属地址空间内的动态执行实例，是操作系统资源分配的基本单位。**（[[process-vs-thread]]）\n\n## 核心特征\n\n- **动态性**：程序是静态的\"生产手册\"（硬盘上的代码），进程是手册被执行的过程——程序运行则进程生，程序停止则进程灭。\n- **资源独立**：OS 为每个进程独立分配资源（CPU 除外），进程间地址空间相互隔离，一个进程崩溃不影响其他进程（保护模式）。\n- **调度载体**：OS 统筹进程的开工顺序，但 CPU 层面的实际执行者是 [[Thread]]。\n\n## 地址空间结构\n\n进程\"激活\"时 OS 划分一块专属地址空间，分三个核心区域：\n\n| 区域 | 内容 | 类比 |\n|---|---|---|\n| 代码区 | 程序执行指令 | 车间生产手册 |\n| 数据区 | 全局变量、静态变量 | 公共物料架 |\n| 堆栈区 | 栈管函数调用临时数据，堆管动态分配（malloc/new） | 临时工具台 + 备用物料箱 |\n\n进程由 PCB（进程控制块）管理其状态（就绪/运行/阻塞等）。\n\n> 完整布局见 [[AddressSpaceLayout]]：整个虚拟地址空间还包括高地址的内核空间（所有进程共享同一份内核），本文的三区属于进程私有的用户空间那一半。\n\n## 进程切换\n\n进程切换 = 保存当前进程上下文（写入 PCB）+ 加载下一进程上下文（重建内存映射）。因上下文包含地址空间信息（页表/段表）这类重量级数据，**进程切换开销通常是线程切换的 10~100 倍**，这是 [[Thread]] 存在的核心动机。详见 [[ContextSwitch]]。\n\n## 与其他概念的关系\n\n- [[Thread]]：进程至少包含一个线程；线程被称为\"轻权进程\"。\n- [[IPC]]：进程地址空间相互隔离，信息交换必须经由内核。\n- [[Signal]]：可向进程发送异步信号（如 SIGINT、SIGKILL）。\n- [[UserModeVsKernelMode]]：地址空间隔离由 CPU 特权级（用户态/内核态）保障，跨进程操作必须陷入内核。\n- [[ConcurrencyAndParallelism]]：单核 CPU 通过时间片轮转在进程/线程间切换实现并发。\n",
+    "preview": "# 进程 (Process) **进程是程序在专属地址空间内的动态执行实例，是操作系统资源分配的基本单位。**（[[process-vs-thread]]） ## 核心特征",
+    "group": -1,
+    "value": 21
+  },
+  {
+    "id": "concepts/Semaphore",
+    "label": "信号量与 PV 操作 (Semaphore)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Semaphore.md",
+    "markdown": "---\ntitle: \"信号量与 PV 操作 (Semaphore)\"\ntype: concept\ntags: [操作系统, 同步互斥]\nsources: [six-ipc-mechanisms, process-vs-thread]\nlast_updated: 2026-09-25\n---\n\n# 信号量与 PV 操作 (Semaphore)\n\n信号量是一个表示系统中某种资源数量的变量（如一台打印机 → 初值为 1 的信号量）。用户进程通过 OS 提供的一对原语 **PV 操作**对信号量操作，实现 [[Process]] 互斥与同步（[[six-ipc-mechanisms]]）。属于只传信号量、不传数据的**低级通信**（见 [[IPC]]）。\n\n## PV 操作语义\n\n**P 操作**（申请资源）：信号量减 1。结果 ≥ 0 → 资源足够，继续执行；结果 < 0 → 无可用资源，进程阻塞。\n\n**V 操作**（释放资源）：信号量加 1。加完后 ≤ 0 → 有进程在等待，唤醒其中一个；> 0 → 无人等待，正常继续。\n\n通俗理解：信号量值为 2 表示 2 个资源可用；为 -2 表示有两个进程正在等待该资源。\n\n## 实现互斥（两步走）\n\n1. 定义互斥信号量，初始化 1\n2. 把临界区（如对 [[SharedMemory]] 的访问）置于 P 与 V 之间\n\nP、V 必须成对出现：缺 P 则无互斥，缺 V 则资源永不释放、等待进程永不唤醒。\n\n## 实现同步（三步走）\n\n因进程推进的异步性（见 [[ConcurrencyAndParallelism]]），进程执行次序不确定。若 P2 的\"代码4\"依赖 P1 的\"代码2\"的结果：\n\n1. 定义同步信号量，初始化为当前可用资源数量\n2. 在优先级较高的操作**后**执行 V（释放资源）\n3. 在优先级较低的操作**前**执行 P（申请资源）\n\n## 线程级应用\n\n[[Thread]] 共享同一进程的数据区/堆区，C++ 中以 `mutex` + `lock_guard` 实现互斥（[[process-vs-thread]]）。注意与 [[Signal]]（信号）是完全不同的概念。\n\n## 关联概念\n\n- [[SharedMemory]]：最典型的使用场景；[[IPC]]：作为低级通信的归属\n- [[Process]] / [[Thread]]：同步互斥的主体\n- [[ThreadSynchronization]] — pthread 五类同步原语的工程形态（本文的落地页）\n- [[JavaMemoryModel]]：锁的规范层依据——happens-before 监视器锁规则（解锁 hb 于后续加锁，保证临界区修改对下一持有者可见）\n",
+    "preview": "# 信号量与 PV 操作 (Semaphore) 信号量是一个表示系统中某种资源数量的变量（如一台打印机 → 初值为 1 的信号量）。用户进程通过 OS 提供的一对原语 **PV 操作**对信号量操作，实现 [[Process]] 互斥与同步（[[six-ipc-mechanisms]]）。属于只传信号量、不传数据的**低级通信**（见 [[IPC]]）。 ## PV 操作语义",
+    "group": -1,
+    "value": 17
+  },
+  {
+    "id": "concepts/SharedMemory",
+    "label": "共享内存 (Shared Memory)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\SharedMemory.md",
+    "markdown": "---\ntitle: \"共享内存 (Shared Memory)\"\ntype: concept\ntags: [操作系统, IPC, 内存管理]\nsources: [six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 共享内存 (Shared Memory)\n\n**最快的 IPC 方式**（[[six-ipc-mechanisms]]）。\n\n## 原理\n\n允许不相干的进程将同一段物理内存连接到各自地址空间。每个 [[Process]] 有专属页表，经 MMU（内存管理单元）将虚拟地址映射到物理地址；**两个进程的逻辑地址通过各自页表映射到物理空间的同一区域，这块共同指向的区域就是共享内存**。某进程写入的数据立即影响所有访问该共享内存的其他进程。\n\n## 为什么最快\n\n不同于 [[MessageQueue]] 的频繁系统调用与数据拷贝：共享内存**仅在建立区域时需要一次系统调用**，建立后所有访问都是常规内存访问，无需内核介入，数据不在进程间来回拷贝。\n\n## 代价：冲突\n\n多个进程同时修改同一共享内存，先写的内容会被后写的覆盖。需要 [[Semaphore]] 实现互斥（任何时刻只有一个进程访问）与同步（按特定顺序访问）。两步互斥走法：定义初值为 1 的互斥信号量 → 把访问代码置于 P、V 操作之间。\n\n## 补充结论\n\n多 CPU 系统上，[[MessageQueue]] 等消息传递的性能可能反而优于共享内存（无需避免冲突）——\"最快\"有适用前提（[[six-ipc-mechanisms]]）。\n\n## 关联概念\n\n- [[IPC]]：六大机制之一；[[MessageQueue]] / [[Pipe]]：被其速度优势替代\n- [[Semaphore]]：共享内存必需的配套保护机制\n- [[Thread]]：线程间通信天然共享地址空间，无需共享内存机制\n",
+    "preview": "# 共享内存 (Shared Memory) **最快的 IPC 方式**（[[six-ipc-mechanisms]]）。 ## 原理",
+    "group": -1,
+    "value": 13
+  },
+  {
+    "id": "concepts/Signal",
+    "label": "信号 (Signal)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Signal.md",
+    "markdown": "---\ntitle: \"信号 (Signal)\"\ntype: concept\ntags: [操作系统, IPC, Linux]\nsources: [six-ipc-mechanisms, process-vs-thread]\nlast_updated: 2026-09-25\n---\n\n# 信号 (Signal)\n\n**[[IPC]] 中唯一的异步通信机制**——可在任何时候发送给某个进程，通知其某个异步事件发生，迫使进程执行信号处理程序；处理完毕后，被中断进程恢复执行（[[six-ipc-mechanisms]]）。\n\n⚠️ **信号和信号量（[[Semaphore]]）是完全不同的两个概念**，名字相似极易混淆。\n\n## 来源\n\n- **硬件来源**：键盘组合键，如 Ctrl+C 产生 SIGINT（终止进程）\n- **软件来源**：kill 系列命令，如 `kill -9 1111` 产生 SIGKILL 让 PID 1111 立即结束\n\n用户、内核和进程都能生成和发送信号。\n\n## 进程级与线程级\n\n[[Process]] 通过 `signal()` 注册的信号处理函数，对进程内所有 [[Thread]] 生效——如同车间的\"紧急停机规则\"，所有生产线听同一警报（[[process-vs-thread]]）。例如 C++ 示例中注册 SIGINT 处理函数后，按 Ctrl+C 所有线程停止运行。\n\n## 对比其他 IPC 机制\n\n[[Pipe]]、[[MessageQueue]]、[[SharedMemory]] 用于批量数据传输；信号不传输业务数据，只传达异步事件通知。\n\n## 关联概念\n\n- [[Semaphore]]：最易混淆的概念，务必区分\n- [[Process]] / [[Thread]]：信号的接收与处理主体\n- [[IPC]]：六大机制之一\n",
+    "preview": "# 信号 (Signal) **[[IPC]] 中唯一的异步通信机制**——可在任何时候发送给某个进程，通知其某个异步事件发生，迫使进程执行信号处理程序；处理完毕后，被中断进程恢复执行（[[six-ipc-mechanisms]]）。 ⚠️ **信号和信号量（[[Semaphore]]）是完全不同的两个概念**，名字相似极易混淆。",
+    "group": -1,
+    "value": 13
+  },
+  {
+    "id": "concepts/Socket",
+    "label": "套接字 (Socket)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Socket.md",
+    "markdown": "---\ntitle: \"套接字 (Socket)\"\ntype: concept\ntags: [操作系统, 网络编程, IPC]\nsources: [six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 套接字 (Socket)\n\nSocket 起源于 Unix，原意\"插座\"，计算机通信领域译为**套接字**，是计算机之间通信的一种约定/方式（[[six-ipc-mechanisms]]）。\n\n## 定位\n\n前五种 [[IPC]] 机制（[[Pipe]]、[[MessageQueue]]、[[SharedMemory]]、[[Semaphore]]、[[Signal]]）都只能用于**同一台主机**上的进程通信；Socket 是唯一能**跨网络与不同主机**进程通信的机制（同主机也能用）。\n\n## 本质\n\nSocket 是**应用层与 TCP/IP 协议族通信的中间软件抽象层**，本质是编程接口（API）：把复杂的 TCP/IP 协议族隐藏在接口后面，用户通过一组简单 API 即可实现网络连接。从网络层面看，Socket 是网络通信端点的抽象，包含五元信息：\n\n1. 连接使用的协议\n2. 本地主机 IP 地址\n3. 本地进程的协议端口\n4. 远地主机的 IP 地址\n5. 远地进程的协议端口\n\n## 对比其他机制\n\n| | 同主机通信 | 跨网络通信 | 数据形态 |\n|---|---|---|---|\n| [[Pipe]] / [[MessageQueue]] / [[SharedMemory]] | ✅ | ❌ | 字节流 / 消息 / 内存 |\n| [[Signal]] | ✅（通知） | ❌ | 无数据 |\n| Socket | ✅ | ✅ | 字节流 |\n\n## 关联概念\n\n- [[IPC]]：六大机制之一，唯一跨网络者\n- [[Process]]：网络通信两端仍是进程；[[Thread]] 共享进程的文件描述符（socket 也是文件描述符）\n",
+    "preview": "# 套接字 (Socket) Socket 起源于 Unix，原意\"插座\"，计算机通信领域译为**套接字**，是计算机之间通信的一种约定/方式（[[six-ipc-mechanisms]]）。 ## 定位",
+    "group": -1,
+    "value": 15
+  },
+  {
+    "id": "concepts/Thread",
+    "label": "线程 (Thread)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\Thread.md",
+    "markdown": "---\ntitle: \"线程 (Thread)\"\ntype: concept\ntags: [操作系统, 线程, 并发]\nsources: [process-vs-thread, claude-concurrency-io-session]\nlast_updated: 2026-09-26\n---\n\n# 线程 (Thread)\n\n**线程是 CPU 任务调度和执行的基本单位，是进程内的执行分支。** 又称\"轻权进程\"或\"轻量级进程\"（[[process-vs-thread]]）。\n\n## 由来\n\n[[Process]] 切换开销太大（见 [[ContextSwitch]]），为解决\"轻量化执行\"需求，线程作为进程内的执行分支应运而生——类比工厂车间里的\"生产线\"：共享车间资源，仅保留专属执行工具。\n\n## 三类私有资源（线程上下文）\n\n线程不单独拥有资源，仅保留执行必需的三类私有资源：\n\n1. **运行栈**：函数局部变量、调用参数，每线程独立，避免数据干扰\n2. **程序计数器（PC）**：下一条指令地址，确保切换后能续上执行\n3. **部分寄存器**：通用寄存器、栈指针\n\n对比进程上下文（含地址空间信息），线程上下文不含地址空间信息，切换时只需保存/加载少量数据，开销极低。\n\n## 共享的进程资源（五类）\n\n同一进程内的线程共享（均有 C++ 示例验证）：\n\n1. **代码区**：所有线程可执行同一函数\n2. **数据区**：全局变量、静态变量（同一内存地址）\n3. **堆区**：malloc/new 动态分配的内存（持指针即可读写）\n4. **文件描述符**：打开的文件、socket 连接\n5. **信号处理方式**：进程注册的信号回调对所有线程生效\n\n> 共享的数据区/堆区即 [[JavaMemoryModel]] 所说的\"主内存共享变量\"（实例域/静态域）：物理上同址，但每核缓存可能让线程读到旧值——可见性问题由此而来。\n\n## 稳定性代价\n\n线程共享进程资源，**一个线程崩溃可能导致整个进程被 OS 杀掉**；多进程因地址空间隔离而更健壮。共享数据区/堆区需要 [[Semaphore]]（互斥锁）保护。\n\n## 阻塞 ≠ 挂起（[[claude-concurrency-io-session]]）\n\n口语上\"阻塞了=挂起了\"大家能听懂，但严格讲是两个正交概念：\n\n| | 阻塞 (blocked) | 挂起 (suspend) |\n|---|---|---|\n| 管的是 | **CPU 调度** | **内存管理** |\n| 意思 | 线程在**等某个事件**（I/O、锁），挂到 fd 等待队列，事件来了转就绪 | 进程映像被**换出到磁盘（swap）**，不占内存 |\n| 谁触发 | 通常是线程自己 | 通常是操作系统（内存紧张） |\n\n注意两个坑：\n- Java `Thread.suspend()` 是被废弃的**他人强暂停**，暂停时不释放锁，会死锁——与\"阻塞等资源\"完全是两码事。\n- Java `Thread.State.BLOCKED` 特指\"等 synchronized 锁\"；**阻塞在 socket I/O 的线程 `jstack` 里常显示 `RUNNABLE`**（JVM 认为在 native 代码里执行 read() 就是可运行的），排查时容易误判。\n\n## 任务选型\n\n- CPU 密集型任务：多进程或少线程，避免频繁切换浪费\n- IO 密集型任务：多线程，线程等待 IO 时 CPU 切到其他线程\n",
+    "preview": "# 线程 (Thread) **线程是 CPU 任务调度和执行的基本单位，是进程内的执行分支。** 又称\"轻权进程\"或\"轻量级进程\"（[[process-vs-thread]]）。 ## 由来",
+    "group": -1,
+    "value": 29
+  },
+  {
+    "id": "concepts/ThreadSynchronization",
+    "label": "线程同步原语 (Thread Synchronization Primitives)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\ThreadSynchronization.md",
+    "markdown": "---\ntitle: \"线程同步原语 (Thread Synchronization Primitives)\"\ntype: concept\ntags: [线程, 同步, 互斥, pthread, Linux]\nsources: [pthread-sync-primitives]\nlast_updated: 2026-09-28\n---\n\n# 线程同步原语 (Thread Synchronization Primitives)\n\n用户态(pthread)的同步互斥工具箱,五类原语解决同一根因:[[Thread]] 共享数据区/堆区,必须重建秩序。理论根基(PV 语义、互斥两步走/同步三步走)见 [[Semaphore]];本页是工程形态([[pthread-sync-primitives]])。\n\n## 五类原语速览\n\n| 原语 | 干什么 | 等待方式 | 适用场景 |\n|---|---|---|---|\n| **互斥锁 mutex** | 临界区一次一个线程 | 挂起休眠(非繁忙等待) | 通用互斥 |\n| **条件变量 cond** | 等\"条件成立\"(配合锁) | wait 释放锁并阻塞 | 生产者-消费者类时序 |\n| **读写锁 rwlock** | 读共享/写独占 | 同锁 | 读多写少 |\n| **自旋锁 spinlock** | 同互斥锁 | **忙等待不让 CPU** | 持锁时间 < ~2 次上下文切换 |\n| **信号量 sem** | 计数器控资源;PV 操作 | 挂起 | 互斥(初值1)与同步(初值0)统一 |\n\n## 互斥锁:三特性\n\n1. **原子性**:锁定是原子操作,同一时刻只有一个线程能锁成功\n2. **唯一性**:解锁前他人无法锁定\n3. **非繁忙等待**:竞争者挂起,**不占 CPU**(对比自旋锁)\n\n变体:`trylock`(已锁立即返回 EBUSY,非阻塞)、`timedlock`(带超时的阻塞)。\n\n## 条件变量:用于等待,不是上锁\n\n与互斥锁**必须配合使用**(条件检测在锁保护下进行):\n\n- `pthread_cond_wait`:**释放锁**并阻塞,被唤醒后重新抢锁、重新评估条件\n- `pthread_cond_signal` 唤醒至少一个等待者;`broadcast` 唤醒全部\n\n**虚假唤醒(spurious wakeup)**:无 signal 也可能从 wait 返回(Linux 多处理器/信号、Windows、JVM 均存在),所以必须:\n\n```cpp\nwhile (条件不满足) { pthread_cond_wait(&cond, &mutex); }  // ✅ 复检\n// 不是 if —— 醒来时条件可能仍不满足\n```\n\n## 读写锁:三种状态\n\n读锁可共存(多读并发),写锁独占(写时禁读禁写)。**适合读次数远多于写次数**的数据结构。变体 `trywrlock` 非阻塞取写锁。\n\n## 自旋锁:用 CPU 换等待\n\n与互斥锁功能相同,唯一差别:阻塞时**忙等待、不让出 CPU**。适用判据:**持锁时间短于约 2 次上下文切换**([[ContextSwitch]]——自旋浪费的 CPU < 切换开销才划算)。用户态少用,内核态常用(中断上下文不能睡眠,只能自旋)。接口:`pthread_spin_init/lock/unlock`(把 mutex 换成 spin)。\n\n## 信号量:一个计数器统一互斥与同步\n\n非负整数计数器,`sem_wait`(P,减1,>0 可访问否则阻塞)、`sem_post`(V,加1)。初值 1 → 互斥守门;初值 0/资源数 → 同步接力(详见 [[Semaphore]] 的两步走/三步走)。\n\n## 选型直觉\n\n- 纯互斥 → mutex;临界区极短且在中断/内核态 → spinlock\n- 读多写少 → rwlock\n- \"等条件\"而非\"抢资源\" → cond + mutex\n- 需要计数/多资源池/跨进程序列 → 信号量\n\n## 关联概念\n\n- [[Semaphore]] — PV 语义与信号量理论(本文的 OS 课视角)\n- [[Thread]] — 共享资源是同步互斥存在的根因\n- [[JavaMemoryModel]] — synchronized/volatile 是这些原语在 Java 层的规范表达(监视器锁 hb 规则)\n- [[Goroutine]] — channel/mutex 是同一问题的 Go 形态\n\n## 来源\n\n- [[pthread-sync-primitives]]\n",
+    "preview": "# 线程同步原语 (Thread Synchronization Primitives) 用户态(pthread)的同步互斥工具箱,五类原语解决同一根因:[[Thread]] 共享数据区/堆区,必须重建秩序。理论根基(PV 语义、互斥两步走/同步三步走)见 [[Semaphore]];本页是工程形态([[pthread-sync-primitives]])。 ## 五类原语速览",
+    "group": -1,
+    "value": 8
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode",
+    "label": "用户态与内核态 (User Mode & Kernel Mode)",
+    "type": "concept",
+    "color": "#FF9800",
+    "path": "wiki\\concepts\\UserModeVsKernelMode.md",
+    "markdown": "---\ntitle: \"用户态与内核态 (User Mode & Kernel Mode)\"\ntype: concept\ntags: [操作系统, 系统调用, 基础概念]\nsources: [process-vs-thread, six-ipc-mechanisms]\nlast_updated: 2026-09-25\n---\n\n# 用户态与内核态 (User Mode & Kernel Mode)\n\nCPU 的特权级机制：用户态代码被限制在自己地址空间内运行，内核态代码可访问全部硬件与系统资源。程序需要内核代劳做的事，通过**系统调用**陷入（trap）内核态完成，结束后返回用户态。这条边界是 [[Process]] 地址空间隔离（[[process-vs-thread]]）与\"[[IPC]] 必须经内核\"（[[six-ipc-mechanisms]]）的硬件基础。\n\n## 判断一行代码是否陷入内核态\n\n**核心判据：这行代码做的事，若由用户程序自己动手，会不会破坏保护机制或干扰其他进程？——会，就要陷入；不会，就留在用户态。**\n\n| 资源/动作 | 例子 | 系统调用 |\n|---|---|---|\n| 文件/网络/终端 I/O | 读写磁盘文件、socket 收发 | `read`/`write`/`open` |\n| 内存疆域扩张 | 申请大块新堆内存 | `brk`/`mmap` |\n| 进程控制 | 创建进程、等待、发信号 | `fork`/`waitpid`/`kill`（[[Signal]]） |\n| 进程间通信 | 管道、消息队列、共享内存 | `pipe`/`mq_*`/`shmget`（[[IPC]]） |\n\n对照面：只在自己地址空间内操作数据（算术、指针、容器增删、`strlen`）→ 纯用户态，不陷入。\n\n### 两个反直觉陷阱\n\n**看起来会、实际暂时没有（缓冲层）**：\n- `printf`/`std::cout` 通常只把字符拷进**用户态缓冲区**；缓冲区满、遇 `endl`（tty 行缓冲）或退出 flush 时才真正 `write` 陷入——是否陷入取决于运行时状态。\n- `malloc`/`free` 复用堆内空闲块时纯用户态；堆不够用需扩张时才 `brk`/`mmap` 陷入。\n\n**看起来不会、实际会（隐藏调用）**：\n- `std::thread` 底层是 `clone`；`system()` 底层是 `fork`+`execve`；大 `vector` 扩容可能触发 `mmap`。\n\n### 查证方法\n\n1. man 手册第 2 节 = 系统调用；第 3 节 C 库函数看其内部封装。\n2. `strace ./程序`（Linux）：逐行打印每次系统调用及参数，最可靠的证据。\n3. Windows 无 strace，用 Process Monitor 或 VS 诊断工具观察。\n\n### 例外：vDSO\n\n`time()`、`getpid()` 等只读系统信息，内核通过 vDSO 把数据页映射进每个进程的用户地址空间，读时间变成普通内存读取，**不陷入**。说明判据本质是\"是否需要内核执行特权操作\"，而非\"是否与系统有关\"。\n\n## 与上下文切换的关系\n\n二者是两种开销完全不同的内核动作（[[ContextSwitch]]）：\n\n- **陷入/返回（mode switch，便宜）**：每个系统调用都是；只切 CPU 特权级、保存少量寄存器，几十 ns~µs。\n- **进程上下文切换（贵 10~100 倍）**：进程阻塞时调度器完整保存/恢复全套寄存器并切换页表（地址空间信息）。\n\n## 关联概念\n\n- [[AddressSpaceLayout]] — 用户/内核两半空间的布局、权限位与数据通路\n- [[Process]]：地址空间隔离是用户态限制的体现；[[Thread]]：同进程线程共享地址空间，无需 IPC\n- [[ContextSwitch]]：陷入是轻量切换，进程切换是重量切换\n- [[IPC]] / [[MessageQueue]] / [[SharedMemory]]：通信机制的\"是否经内核\"决定其陷入次数与性能档位\n",
+    "preview": "# 用户态与内核态 (User Mode & Kernel Mode) CPU 的特权级机制：用户态代码被限制在自己地址空间内运行，内核态代码可访问全部硬件与系统资源。程序需要内核代劳做的事，通过**系统调用**陷入（trap）内核态完成，结束后返回用户态。这条边界是 [[Process]] 地址空间隔离（[[process-vs-thread]]）与\"[[IPC]] 必须经内核\"（[[six-ipc-mechanisms]]）的硬件基",
+    "group": -1,
+    "value": 16
+  },
+  {
+    "id": "entities/Anthropic",
+    "label": "Anthropic",
+    "type": "entity",
+    "color": "#2196F3",
+    "path": "wiki\\entities\\Anthropic.md",
+    "markdown": "---\ntitle: \"Anthropic\"\ntype: entity\ntags: [公司, AI]\nsources: [mcp-explained]\nlast_updated: 2026-09-26\n---\n\n# Anthropic\n\nAI 公司,Claude 系列模型的开发者。在 [[mcp-explained]] 的语境中,MCP([[ModelContextProtocol]],模型上下文协议)由 Anthropic 推出——一个连接大型语言模型与外部工具、数据源和应用系统的开放协议,被类比为\"AI 应用的 USB-C 接口\"。\n\n## 关键事实\n\n- 推出了开放协议 MCP,标准化模型获取上下文与执行操作的方式\n- 其产品 Claude Desktop 属于 MCP Host(启动 LLM 连接的应用程序)的典型实例\n- MCP 官方资源:github.com/modelcontextprotocol、modelcontextprotocol.io\n\n## 来源\n\n- [[mcp-explained]]\n",
+    "preview": "# Anthropic AI 公司,Claude 系列模型的开发者。在 [[mcp-explained]] 的语境中,MCP([[ModelContextProtocol]],模型上下文协议)由 Anthropic 推出——一个连接大型语言模型与外部工具、数据源和应用系统的开放协议,被类比为\"AI 应用的 USB-C 接口\"。 ## 关键事实",
+    "group": -1,
+    "value": 5
+  },
+  {
+    "id": "entities/ClaudeCode",
+    "label": "Claude Code",
+    "type": "entity",
+    "color": "#2196F3",
+    "path": "wiki\\entities\\ClaudeCode.md",
+    "markdown": "---\ntitle: \"Claude Code\"\ntype: entity\ntags: [AI, 工具, Agent, 并发]\nsources: [claude-concurrency-io-session]\nlast_updated: 2026-09-26\n---\n\n# Claude Code\n\n[[Anthropic]] 推出的 AI 编程 CLI(agent 工具)。在 [[claude-concurrency-io-session]] 中,用户与其子 agent 并行机制的源码分析结论如下。\n\n## 并发模型(源码分析结论)\n\n**并行子 agent 不用多线程**:整个 `src/` 无 `worker_threads` 原语(零命中)。\n\n- **in-process 路径 = 单线程 async/await 协程并发**:一条 assistant 消息发出多个 `Agent` 调用时,`StreamingToolExecutor` 对工具调用发起 Promise 但不 await(`Promise.race` 等待);Agent 工具声明 `isConcurrencySafe`,多个子 agent 作为 AsyncGenerator 在同一事件循环交错推进([[EventLoop]] 模型)。\n- **workflow 同为单线程**:workflow 任务是 `LocalWorkflowTask`,子 agent 复用普通 subagent 的 `runAgent()` 路径,`parallel` 编排原语是对 `runAgent()` 的 async 封装。\n- **swarm/tmux/iTerm2 队友 = 多进程**:`spawnMultiAgent` 拼命令后 `send-keys` 启动全新 OS 进程([[Process]]),每个进程各自一个线程。\n- **Bash 工具**:spawn 子进程执行命令,OS 可调度到不同 CPU 核。\n\n## 为什么不需要多线程\n\n子 agent 耗时大头是**等 LLM API 的网络 I/O**(流式返回),不是 CPU 密集计算。单线程事件循环上的 async I/O 足以让大量 agent 交错推进;真正需要 CPU 并行的地方由子进程解决。多线程(worker_threads)在此没有收益,反增共享内存同步复杂度。\n\n## 关联\n\n- [[Anthropic]] — Claude Code 的开发者;其协议生态见 [[ModelContextProtocol]](Claude Desktop 是典型 MCP Host)\n- [[EventLoop]] — in-process agent 并发的运行时模型\n- [[Thread]] / [[Process]] — 单线程协程并发 vs 多进程隔离的取舍实例\n\n## 来源\n\n- [[claude-concurrency-io-session]]\n",
+    "preview": "# Claude Code [[Anthropic]] 推出的 AI 编程 CLI(agent 工具)。在 [[claude-concurrency-io-session]] 中,用户与其子 agent 并行机制的源码分析结论如下。 ## 并发模型(源码分析结论)",
+    "group": -1,
+    "value": 8
+  },
+  {
+    "id": "sources/claude-concurrency-io-session",
+    "label": "Claude 会话：多 Agent 并发模型与 Java/Node IO 模型深谈",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\claude-concurrency-io-session.md",
+    "markdown": "---\ntitle: \"Claude 会话：多 Agent 并发模型与 Java/Node IO 模型深谈\"\ntype: source\ntags: [并发, IO模型, 多路复用, 事件循环, 线程, Claude Code, Java, Node.js]\ndate: 2026-09-28\nsource_file: raw/sessions/claude-concurrency-io-session.md\n---\n\n## Summary\n\nClaude Code 会话(2026-09-26 ~ 09-28,8 轮问答)。以一次源码级分析开篇——[[ClaudeCode]] 并行运行多个子 agent 时是否用多线程(答案:否),随后顺势展开应用层并发与 IO 的体系化讲解:[[IOModels]](BIO/NIO/AIO 及阻塞×同步/异步二维矩阵)、[[FutureAndPromise]]、[[IOMultiplexing]] 内核原理(select/poll/epoll)、日常开发的框架地图与铁律、同步/异步的命名词源、线程阻塞与挂起的术语辨析。全会话以\"单线程事件循环 + 多路复用\"为主线,把 [[Thread]]/[[Process]] 等 OS 概念自然延伸到 Java/Node 工程实践。\n\n## Key Claims\n\n- **Claude Code 并行子 agent 不用多线程**:全仓库无 `worker_threads`;in-process 路径是单线程事件循环上的 async/await 协程并发(`StreamingToolExecutor` 对工具调用不 await、`Promise.race` 等待;Agent 工具标记 `isConcurrencySafe`);swarm/tmux 队友走**多进程**;workflow 是 `LocalWorkflowTask`,复用同一 `runAgent()` 路径——同为单线程 async 并发。\n- **BIO/NIO/AIO 由两个正交维度组合**:阻塞/非阻塞(线程能不能先去干别的)× 同步/异步(数据拷贝谁来做)。NIO 非阻塞但仍是**同步**(就绪后应用亲自 read 拷贝);AIO 才把拷贝也交给内核(Proactor);BIO 一连接一线程是 C10K 根源。\n- **Future ≠ Promise**:`Future.get()` 是阻塞取结果,`Promise.then()` 是非阻塞注册回调;真正对应 Promise 的是 `CompletableFuture`(thenApply/thenCompose/exceptionally),AIO 的 `CompletionHandler` 回调在语义上最贴 Promise.then。\n- **Java AIO 不是单线程事件循环**:底层是 epoll/IOCP 就绪队列 + 线程池并发消费,回调在不同池线程执行需线程安全;Linux 上 JDK AIO 长期是 epoll+线程池模拟,真正内核异步是 `io_uring`。\n- **IO 多路复用原理**:阻塞的线程被内核挂到 fd 的等待队列;多路复用让一个线程同时挂到 N 个 fd 上等,epoll 用红黑树(注册一次)+就绪链表(回调挂入)实现 O(1) 获取就绪事件。\n- **日常开发铁律**:别在单线程事件循环里用同步 API/跑 CPU 密集任务;别在非阻塞框架(WebFlux/Netty)里写阻塞代码;永远用连接池;所有外部调用设超时。Java 21 虚拟线程把 epoll 多路复用做进运行时,让阻塞式代码也能扛高并发。\n- **同步/异步命名**=希腊语 syn(一起)+chronos(时间):同步=两动作时间步调绑死(打电话),异步=各走各的时间线(发消息)。\n- **线程阻塞 ≠ 挂起**:阻塞是线程自己等资源而睡眠(OS 等待队列);Java `suspend()` 是被废弃的他人强暂停(不释放锁,会死锁);OS 七状态模型里\"挂起\"指进程映像换出内存(swap),与阻塞正交。\n\n## Key Quotes\n\n> \"并行子 agent = 单线程 async/await 协程并发(in-process 路径)+ 独立 OS 进程(swarm/tmux 路径),没有用到多线程。\" —— 会话开篇源码分析的结论\n\n> \"多路复用其实就一句话能点破:'阻塞'本身没错,错的是'每个连接都占一个线程去阻塞'。\" —— IO 多路复用讲解的开宗明义\n\n> \"Future ≈'未来值的阻塞句柄',Promise ≈'未来值的回调协议'。前者问你'现在好了没?没好我原地等着';后者说'好了叫我'。\" —— Future 与 Promise 的本质区别\n\n> \"底层原理你不需要手写,但必须知道'我这套框架是单线程事件循环,还是线程池,还是非阻塞 Reactor',然后遵守一条铁律——别在你所在的模型上干阻塞/耗时的事。\" —— 日常开发建议的总结\n\n## Connections\n\n- [[IOModels]] — BIO/NIO/AIO 二维矩阵与 Reactor/Proactor\n- [[IOMultiplexing]] — select/poll/epoll 内核原理\n- [[EventLoop]] — 单线程事件循环与 Java AIO 线程池消费的对比\n- [[FutureAndPromise]] — Java Future / CompletableFuture / JS Promise\n- [[ClaudeCode]] — 会话开篇的源码分析对象\n- [[Thread]] — 阻塞/挂起辨析、BIO 一连接一线程的代价\n- [[Process]] — swarm 队友走多进程\n- [[Socket]] — epoll 监听的对象即 socket fd\n- [[ConcurrencyAndParallelism]] — 单线程并发 vs 多核并行的工程印证\n\n## Contradictions\n\n- 无。会话内容与 [[process-vs-thread]]、[[six-ipc-mechanisms]] 的 OS 基础互补:彼处讲概念原理,此处讲这些原理在 Java/Node 框架与真实 agent 系统中的落地。\n",
+    "preview": "## Summary Claude Code 会话(2026-09-26 ~ 09-28,8 轮问答)。以一次源码级分析开篇——[[ClaudeCode]] 并行运行多个子 agent 时是否用多线程(答案:否),随后顺势展开应用层并发与 IO 的体系化讲解:[[IOModels]](BIO/NIO/AIO 及阻塞×同步/异步二维矩阵)、[[FutureAndPromise]]、[[IOMultiplexing]] 内核原理(selec",
+    "group": -1,
+    "value": 14
+  },
+  {
+    "id": "sources/java-memory-and-jmm",
+    "label": "深入理解Java内存区域与内存模型：从运行时数据区到并发可见性的全解析",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\java-memory-and-jmm.md",
+    "markdown": "---\ntitle: \"深入理解Java内存区域与内存模型：从运行时数据区到并发可见性的全解析\"\ntype: source\ntags: [JVM, Java, 内存, JMM, 并发]\ndate: 2026-09-28\nsource_file: raw/articles/java-memory-and-jmm.md\n---\n\n## Summary\n\nCSDN 长文，系统拆解 Java 的两个易混概念：**Java 内存结构**(JVM 运行时数据区：堆/方法区共享，虚拟机栈/程序计数器/本地方法栈私有)与 **Java 内存模型**(JMM：主内存 + 每线程工作内存的抽象访问规范)。涵盖方法区从永久代到元空间的演进、运行时常量池的符号解析、直接内存，以及 JMM 的重排序问题与 happens-before 八条规则。本文是\"三层内存视角\"(OS 地址空间 / JVM 结构 / JMM 规范)的中间层与顶层来源。\n\n## Key Claims\n\n- **Java 内存结构 = JVM 对自己用户空间的逻辑分区**：线程共享区(堆、方法区)与线程隔离区(程序计数器、虚拟机栈、本地方法栈);HotSpot 将本地方法栈与虚拟机栈合二为一。\n- **Java 堆是逻辑概念，堆空间是物理承载**：规范上方法区是堆的逻辑部分(别名 Non-Heap);Java 8 后永久代(PermGen)被元空间(Metaspace)取代，类元数据移入本地内存，静态变量与字符串常量池移入物理堆。\n- **程序计数器是唯一无 OOM 的区域**(字节码行号指示器);虚拟机栈抛 `StackOverflowError`;直接内存通过 `DirectByteBuffer` 引用堆外内存，避免 Java 堆与 Native 堆来回复制。\n- **JMM 是抽象规范而非内存布局**：主内存存共享变量；工作内存是每线程抽象，\"涵盖高速缓存、写缓冲区、寄存器\";线程操作必须在工作内存进行，线程间传值必须经主内存(刷新+读取两步)。\n- **JMM 解决可见性/有序性/原子性**：手段是 `volatile`/`synchronized`/`final` 三关键字 + happens-before 八条规则 + 内存屏障；本质是\"按需禁用缓存和编译优化\"。\n- **happens-before 八条**：程序次序、监视器锁、volatile、传递性、start()、join()、中断、对象终结。\n\n## Key Quotes\n\n> \"前者是实际的内存区域划分，后者是多线程访问共享变量的抽象规范\" —— 全文立论：内存结构 ≠ 内存模型\n\n> \"工作内存……是抽象概念，涵盖高速缓存、写缓冲区、寄存器\" —— 点破 JMM 工作内存的真身\n\n> \"导致可见性的原因是缓存，导致有序性的原因是编译优化\" —— JMM 存在的两个硬件根源\n\n## Connections\n\n- [[JvmRuntimeMemory]] — 本文第一部分的提炼页：JVM 运行时数据区\n- [[JavaMemoryModel]] — 本文第二部分的提炼页：JMM 抽象与并发规则\n- [[AddressSpaceLayout]] — 底层视角：JVM 所有区域都活在进程用户空间内\n- [[Thread]] — \"五类共享资源\"即 JMM 的共享变量；每线程私有栈即虚拟机栈\n- [[Semaphore]] — synchronized/锁在规范层的依据是 happens-before 监视器锁规则\n- [[thread-essence]] — JMM 工作内存 ≈ 硬件层\"每核一份的寄存器+缓存\"\n\n## Contradictions\n\n- 无。与 [[AddressSpaceLayout]] 是\"同一座楼的三个视角\":OS 层说线程共享地址空间、私有栈;JVM 结构层把共享区细分为堆/方法区;JMM 层画的\"主内存/工作内存\"是缓存一致性问题域的规范抽象，**不是**真实的内存划分——三者互不冲突。\n",
+    "preview": "## Summary CSDN 长文，系统拆解 Java 的两个易混概念：**Java 内存结构**(JVM 运行时数据区：堆/方法区共享，虚拟机栈/程序计数器/本地方法栈私有)与 **Java 内存模型**(JMM：主内存 + 每线程工作内存的抽象访问规范)。涵盖方法区从永久代到元空间的演进、运行时常量池的符号解析、直接内存，以及 JMM 的重排序问题与 happens-before 八条规则。本文是\"三层内存视角\"(OS 地址空间 ",
+    "group": -1,
+    "value": 8
+  },
+  {
+    "id": "sources/linux-io-models",
+    "label": "Linux IO模型:阻塞、非阻塞、多路复用、异步",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\linux-io-models.md",
+    "markdown": "---\ntitle: \"Linux IO模型:阻塞、非阻塞、多路复用、异步\"\ntype: source\ntags: [IO, 并发, Linux, 操作系统]\ndate: 2026-09-28\nsource_file: raw/articles/linux-io-models.md\n---\n\n## Summary\n\nCSDN 文章,以\"用户进程向内核取数据\"为主线串讲四种 IO 模型:阻塞 IO、非阻塞 IO、多路复用 IO、异步 IO。核心贡献是一个清晰的两阶段决策框架——**数据没准备好时**(让用户进程等=阻塞 / 返回 ERROR=非阻塞)与**数据准备好后**(等你来取=同步 / 主动送到+发信号=异步),并得出结论:**不管阻塞 IO 还是非阻塞 IO 都是同步 IO**。\n\n## Key Claims\n\n- 阻塞 IO:用户线程发起系统调用后阻塞,内核把数据从内核空间拷到用户空间后才返回。\n- 非阻塞 IO:内核没准备好数据立即返回 error,用户线程可重复发起;数据就绪后的拷贝阶段仍需阻塞用户线程——所以它是同步 IO。\n- 多路复用 IO:select 阻塞监听一批 socket,数据就绪后返回并通知用户线程读取。\n- 异步 IO:aio_read 后立即返回,内核拷好数据并发信号通知用户。\n- **两阶段框架**:没数据时(阻塞/非阻塞) × 有数据后(同步=你再来取 / 异步=送上门+信号)。阻塞与非阻塞都只是\"同步\"的子情况。\n\n## Key Quotes\n\n> \"不管是阻塞IO,还是非阻塞IO都是同步IO\" —— 全文结论\n\n> \"异步IO与非阻塞IO的区别在于……异步IO中内核准备好数据后会将数据从内核空间自动拷贝到用户空间\" —— 异步的本质:拷贝也代劳\n\n## Connections\n\n- [[IOModels]] — 本文是该页的独立印证源:二维矩阵(阻塞×同步/异步)与 BIO/NIO/AIO 对应\n- [[IOMultiplexing]] — 多路复用一节的展开页\n- [[AddressSpaceLayout]] — \"系统调用是用户空间和内核空间的一个通道\"\n- [[sync-vs-async]] — 两阶段框架是同步/异步定义的 IO 化落地\n\n## Contradictions\n\n- 与 [[IOMultiplexing]] 的细微出入:本文写多路复用时\"内核将数据拷贝到用户空间并返回\",严格讲多路复用只负责通知就绪,**拷贝由应用 read() 完成**(这正是它归\"同步\"的原因)。本文对多路复用阶段的描述略含混,但其\"多路复用属于同步 IO\"的结论正确,与知识库一致。\n",
+    "preview": "## Summary CSDN 文章,以\"用户进程向内核取数据\"为主线串讲四种 IO 模型:阻塞 IO、非阻塞 IO、多路复用 IO、异步 IO。核心贡献是一个清晰的两阶段决策框架——**数据没准备好时**(让用户进程等=阻塞 / 返回 ERROR=非阻塞)与**数据准备好后**(等你来取=同步 / 主动送到+发信号=异步),并得出结论:**不管阻塞 IO 还是非阻塞 IO 都是同步 IO**。 ## Key Claims",
+    "group": -1,
+    "value": 5
+  },
+  {
+    "id": "sources/mcp-explained",
+    "label": "MCP 到底是什么？一文带你彻底搞懂(附:从零构建MCP实例)",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\mcp-explained.md",
+    "markdown": "---\ntitle: \"MCP 到底是什么？一文带你彻底搞懂(附:从零构建MCP实例)\"\ntype: source\ntags: [MCP, AI, 协议, Agent, 工具调用]\ndate: 2026-09-26\nsource_file: raw/articles/mcp-explained.md\n---\n\n## Summary\n\n腾讯云开发者社区文章(原始发表于微信公众号),系统讲解 MCP(Model Context Protocol)的概念、架构、核心组件与通信机制,并附 FastMCP 从零构建实例。全文覆盖:MCP 的定位(\"AI 应用的 USB-C 接口\")、客户端-服务器架构(MCP Client / MCP Server / Host)、三大核心原语([[MCPTool]] / [[MCPResource]] / [[MCPPrompt]])的字段规范、七步工作流程,以及三种传输方式(STDIO / SSE / Streamable HTTP)的对比与演进——SSE 已被官方弃用,由 Streamable HTTP 替代。\n\n## Key Claims\n\n- MCP 是由 Claude 母公司 [[Anthropic]] 推出的开放协议,用于连接 LLM 与外部工具、数据源和应用系统,标准化模型获取上下文与执行操作的方式。\n- MCP 采用客户端-服务器架构:MCP Client 是\"调度与通信层\"(连接、发现能力、协议转换、结果回灌上下文),MCP Server 是\"能力网关\"(暴露 Tools/Resources 并执行具体操作);MCP Host 指启动连接的应用程序(Cursor、Claude Desktop、Cline)。\n- 三大核心原语分工:[[MCPTool]] 可执行、会改变系统状态(类似函数调用);[[MCPResource]] 只读数据、只提供上下文不执行操作;[[MCPPrompt]] 标准化任务模板,让模型\"不仅知道做什么,还知道如何做\"。\n- 工作流程七步:建立连接 → 协商沟通规则 → 客户端发现能力清单 → LLM 思考选工具并传参 → 客户端转成标准协议消息 → 服务器调外部系统执行 → 结果逐级回传、上下文更新。\n- 通信协议统一为 JSON-RPC,传输方式三种:STDIO(默认,父子进程 stdin/stdout,无网络低延迟强隔离,要求纯净 JSON 输出,本质是\"本地进程级 RPC 通道\")、SSE(HTTP 单向流式,官方已弃用)、Streamable HTTP(推荐替代,兼顾请求-响应与流式输出,易集成认证/网关/负载均衡)。\n- 工程价值不在于替代现有架构,而在于解耦模型与工具之间的交互复杂度,让开发者专注业务逻辑。\n\n## Key Quotes\n\n> \"我们可以形象地将 MCP 看做是 AI 应用程序的 USB-C 接口\" —— 对 MCP 定位的核心类比\n\n> \"STDIO 本质上是一种'本地进程级 RPC 通道'\" —— STDIO 通信方式的本质概括\n\n> \"MCP 的价值不在于'替代现有架构',而在于解耦模型与工具之间的交互复杂度\" —— 文末小结的工程判断\n\n## Connections\n\n- [[ModelContextProtocol]] — 全文主题:MCP 的定义、架构、工作流程与通信机制\n- [[MCPTool]] / [[MCPResource]] / [[MCPPrompt]] — 文章核心章节展开的三大原语\n- [[Anthropic]] — MCP 协议的推出方\n- [[Pipe]] — STDIO 父子进程经 stdin/stdout 通信,本质上复用了操作系统匿名管道的进程间通信机制\n- [[Socket]] — SSE/Streamable HTTP 基于 HTTP 长连接与网络通信,与 Socket 跨网络通信能力属于同一层的网络 IPC 范畴\n\n## Contradictions\n\n- 无。与现有 OS 主题互补而非冲突:本文的 STDIO 机制([[Pipe]] 的进程间通信)与网络传输([[Socket]])恰好是 [[six-ipc-mechanisms]] 中两类 IPC 在 AI 协议层的应用实例。\n",
+    "preview": "## Summary 腾讯云开发者社区文章(原始发表于微信公众号),系统讲解 MCP(Model Context Protocol)的概念、架构、核心组件与通信机制,并附 FastMCP 从零构建实例。全文覆盖:MCP 的定位(\"AI 应用的 USB-C 接口\")、客户端-服务器架构(MCP Client / MCP Server / Host)、三大核心原语([[MCPTool]] / [[MCPResource]] / [[MCPP",
+    "group": -1,
+    "value": 10
+  },
+  {
+    "id": "sources/process-vs-thread",
+    "label": "进程 vs 线程：从原理到区别，一次讲清楚",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\process-vs-thread.md",
+    "markdown": "---\ntitle: \"进程 vs 线程：从原理到区别，一次讲清楚\"\ntype: source\ntags: [操作系统, 进程, 线程, 面试]\ndate: 2026-09-25\nsource_file: raw/articles/process-vs-thread.md\n---\n\n## Summary\n\n知乎专栏文章，用\"工厂—车间—生产线—工人\"的类比系统讲解 [[Process]] 与 [[Thread]] 的本质区别。全文覆盖：进程地址空间结构（代码区/数据区/堆栈区）、进程上下文构成与切换开销、线程的私有资源与共享资源（含 C++ 代码示例验证五类共享）、进程与线程的四维对比、并发与并行的时间片轮转原理，以及 CPU/IO 密集型任务的多进程/多线程选型建议。\n\n## Key Claims\n\n- 进程是程序在专属地址空间内的动态执行实例，是 OS **资源分配**的基本单位；线程是 CPU **调度执行**的基本单位。\n- 进程地址空间分三区：代码区（指令）、数据区（全局/静态变量）、堆栈区（栈管函数调用、堆管动态分配）。\n- 进程上下文 = CPU 寄存器 + 进程状态（由 PCB 管理）+ 地址空间信息（页表/段表）+ 内核栈与用户栈；线程上下文仅含运行栈、程序计数器（PC）、部分寄存器。\n- 因进程上下文包含重量级地址空间信息，**进程切换开销通常是线程切换的 10~100 倍**——这是线程存在的核心原因。\n- 线程共享所属进程的五类资源：代码区、数据区（全局/静态变量）、堆区（malloc/new）、文件描述符、信号处理方式——均有 C++ 示例代码验证。\n- 一个线程崩溃可能导致整个进程被 OS 杀掉；多进程因地址空间隔离而更健壮。\n- 单核 CPU 靠**时间片轮转**实现并发（\"看似同时\"），多核才能实现并行（\"真正同时\"）。\n- CPU 密集型任务建议多进程或少线程（避免切换浪费）；IO 密集型任务建议多线程（等待 IO 时切换其他线程）。\n\n## Key Quotes\n\n> \"一个是资源分配单位，一个是调度执行单位\" —— 对进程/线程区别的八股文标准回答，本文要展开的是其背后的调度逻辑\n\n> \"进程切换的开销通常是线程切换的 10~100 倍——这也是线程存在的核心原因\" —— Part1 上下文切换的核心结论\n\n> \"一个厨师轮流炒两锅菜（并发），两个厨师各炒一锅（并行）\" —— 并发与并行的经典类比\n\n## Connections\n\n- [[Process]] — 本文核心主题之一：本质、地址空间、上下文切换\n- [[Thread]] — 本文核心主题之二：私有资源、五类共享资源\n- [[ContextSwitch]] — Part1/Part2 的进程上下文与线程上下文对比\n- [[ConcurrencyAndParallelism]] — Part4 时间片轮转、并发 vs 并行\n- [[Semaphore]] — 文中 C++ 示例用 mutex/lock_guard 保护共享变量，与同步互斥主题呼应\n- [[IPC]] — 进程地址空间相互隔离，进程间通信必须经内核，是 [[six-ipc-mechanisms]] 的铺垫\n\n## Contradictions\n\n- 无。与 [[six-ipc-mechanisms]] 互补：本文讲\"进程/线程是什么\"，彼文讲\"进程之间怎么通信\"。\n",
+    "preview": "## Summary 知乎专栏文章，用\"工厂—车间—生产线—工人\"的类比系统讲解 [[Process]] 与 [[Thread]] 的本质区别。全文覆盖：进程地址空间结构（代码区/数据区/堆栈区）、进程上下文构成与切换开销、线程的私有资源与共享资源（含 C++ 代码示例验证五类共享）、进程与线程的四维对比、并发与并行的时间片轮转原理，以及 CPU/IO 密集型任务的多进程/多线程选型建议。 ## Key Claims",
+    "group": -1,
+    "value": 13
+  },
+  {
+    "id": "sources/pthread-sync-primitives",
+    "label": "线程同步与互斥(pthread 原语详解)",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\pthread-sync-primitives.md",
+    "markdown": "---\ntitle: \"线程同步与互斥(pthread 原语详解)\"\ntype: source\ntags: [线程, 同步, 互斥, pthread, Linux]\ndate: 2026-09-28\nsource_file: raw/articles/pthread-sync-primitives.md\n---\n\n## Summary\n\nCSDN 文章,pthread 同步原语全家桶:互斥锁、条件变量、读写锁、自旋锁、信号量五类,每类给出特点、操作流程、API 与 demo。开篇先立同步与互斥的概念区分(同步=严格先后次序、互斥=公共资源同一时刻只一个使用),结尾用信号量同时演示\"用于同步\"(初值 0 交替推进)与\"用于互斥\"(初值 1 夹临界区)。是 [[ThreadSynchronization]] 概念页的直接来源。\n\n## Key Claims\n\n- **互斥锁三特性**:原子性(锁定是原子操作)、唯一性(解锁前他人无法锁定)、非繁忙等待(竞争者挂起不占 CPU)。\n- **条件变量用于等待而非上锁**,必须与互斥锁配合:wait 时释放锁并阻塞;signal 唤醒至少一个等待者,broadcast 唤醒全部。\n- **虚假唤醒(spurious wakeup)**:无 signal 也可能从 wait 返回,必须用 `while(条件不满足)` 而非 `if` 复检——Linux 多处理器/信号、Windows、JVM 上都存在。\n- **读写锁三种状态**:读锁可多线程共存,写锁独占(写时禁止读);适合读远多于写的场景。\n- **自旋锁**:与互斥锁功能相同,但阻塞时忙等待不让出 CPU;用户态少用、内核态常用;适用条件:持锁时间短于约 2 次上下文切换。\n- **信号量**=非负整数计数器,PV 原语操作;初值 1 做互斥、初值按资源数做同步。\n\n## Key Quotes\n\n> \"互斥锁只有两种状态,即上锁(lock)和解锁(unlock)\" —— 互斥锁的极简定义\n\n> \"即使没有线程调用 condition_signal,原先调用 condition_wait 的函数也可能会返回\" —— 虚假唤醒的定义\n\n> \"自旋锁……互斥量阻塞后休眠让出cpu,而自旋锁阻塞后不会让出cpu,会一直忙等待\" —— 自旋锁与互斥锁的唯一差别\n\n## Connections\n\n- [[ThreadSynchronization]] — 本文的提炼页:pthread 五类同步原语\n- [[Semaphore]] — 本文第六节的 OS 视角对应页(PV 语义、互斥两步走/同步三步走)\n- [[Thread]] — 同步互斥存在的根因:线程共享数据区/堆区\n- [[ContextSwitch]] — 自旋锁\"持锁时间 < 2 次上下文切换\"的取舍依据\n\n## Contradictions\n\n- 无。与 [[Semaphore]] 完全互补:彼页讲 PV 语义与信号量理论,本页讲 pthread 全套原语的工程形态(含 demo 与 API)。\n",
+    "preview": "## Summary CSDN 文章,pthread 同步原语全家桶:互斥锁、条件变量、读写锁、自旋锁、信号量五类,每类给出特点、操作流程、API 与 demo。开篇先立同步与互斥的概念区分(同步=严格先后次序、互斥=公共资源同一时刻只一个使用),结尾用信号量同时演示\"用于同步\"(初值 0 交替推进)与\"用于互斥\"(初值 1 夹临界区)。是 [[ThreadSynchronization]] 概念页的直接来源。 ## Key Claim",
+    "group": -1,
+    "value": 5
+  },
+  {
+    "id": "sources/six-ipc-mechanisms",
+    "label": "一文搞懂六大进程通信机制原理(全网最详细)",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\six-ipc-mechanisms.md",
+    "markdown": "---\ntitle: \"一文搞懂六大进程通信机制原理(全网最详细)\"\ntype: source\ntags: [操作系统, 进程通信, IPC, Linux]\ndate: 2026-09-25\nsource_file: raw/articles/six-ipc-mechanisms.md\n---\n\n## Summary\n\n知乎专栏文章，系统梳理 Linux 内核提供的六大进程通信（IPC）机制：管道、消息队列、共享内存、信号量与 PV 操作、信号、套接字（Socket）。开篇明确两个易混点：进程同步与互斥本质也是通信（只传信号量、不传数据，称\"低级通信\"）；进程用户地址空间相互隔离但内核空间共享，因此进程通信必须经由内核。每种机制都给出本质定义、与相邻机制的对比（效率/格式/范围）及 C API（pipe、mkfifo、kill 等）。\n\n## Key Claims\n\n- 进程通信（IPC）= 进程间信息交换；同步与互斥传输的只是信号量，缺乏传数据能力，属于低级通信。\n- [[Pipe]] 本质是内核在内存开辟的缓冲区（特殊文件，自立文件系统）：匿名管道半双工、仅限父子进程、随进程销毁；有名管道（FIFO）有路径名、无亲缘限制、先进先出。\n- [[MessageQueue]] 本质是内存中消息的链表，支持按类型随机查询、生命周期随内核；但读写都要经过用户态↔内核态拷贝，大数据量时频繁系统调用、效率低。\n- [[SharedMemory]] 是两个进程的页表映射到同一物理内存区域，仅建立时需要系统调用，之后访问如同常规内存、**是最快的 IPC 方式**；但多进程同时写会冲突，需配合 [[Semaphore]]。\n- [[Semaphore]] 表示资源数量，P 操作减 1（<0 则阻塞），V 操作加 1（≤0 则唤醒等待进程）；互斥两步走（初值 1 + P/V 夹访问），同步三步走（V 放在高优先级操作后，P 放在低优先级操作前）。\n- [[Signal]] 是 IPC 中唯一的**异步**机制，与信号量完全不同；来源分硬件（如 Ctrl+C 产生 SIGINT）与软件（如 kill -9 产生 SIGKILL）。\n- [[Socket]] 是跨网络进程通信的唯一选择（同主机也能用），本质是封装 TCP/IP 的编程接口（API），含协议、本地 IP/端口、远端 IP/端口五元信息。\n- 多 CPU 系统上消息传递的性能可能优于共享内存（消息队列无需避免冲突）。\n\n## Key Quotes\n\n> \"为了保证安全，每个进程的用户地址空间都是独立的……不过内核空间是每个进程都共享的，所以进程之间想要进行信息交换就必须通过内核\" —— 全文总纲\n\n> \"信号和信号量是完全不同的两个概念！\" —— 反复强调的易混点\n\n> \"当信号量的值为 2 的时候，表示有 2 个资源可以使用，当信号量的值为 -2 的时候，表示有两个进程正在等待使用这个资源\" —— P 操作语义的通俗解释\n\n## Connections\n\n- [[IPC]] — 本文总纲页：通信的定义、经内核的必然性\n- [[Process]] — 通信的主体；与 [[process-vs-thread]] 的\"地址空间隔离\"结论直接衔接\n- [[Pipe]] / [[MessageQueue]] / [[SharedMemory]] / [[Semaphore]] / [[Signal]] / [[Socket]] — 六大机制各建一页\n- [[Thread]] — 信号处理函数对进程内所有线程生效；互斥锁是 [[Semaphore]] 的线程级应用\n- [[ConcurrencyAndParallelism]] — 进程\"走走停停\"的异步性正是需要同步机制的原因\n\n## Contradictions\n\n- 与部分资料的常见说法（\"共享内存永远最快\"）存在细节出入：本文指出**在多 CPU 系统上，消息传递的性能可能优于共享内存**。此为其引用\"最新研究\"的限定条件，非错误。\n",
+    "preview": "## Summary 知乎专栏文章，系统梳理 Linux 内核提供的六大进程通信（IPC）机制：管道、消息队列、共享内存、信号量与 PV 操作、信号、套接字（Socket）。开篇明确两个易混点：进程同步与互斥本质也是通信（只传信号量、不传数据，称\"低级通信\"）；进程用户地址空间相互隔离但内核空间共享，因此进程通信必须经由内核。每种机制都给出本质定义、与相邻机制的对比（效率/格式/范围）及 C API（pipe、mkfifo、kill 等",
+    "group": -1,
+    "value": 17
+  },
+  {
+    "id": "sources/sync-vs-async",
+    "label": "同步(Synchronous)和异步(Asynchronous)的理解和区别讲解",
+    "type": "source",
+    "color": "#4CAF50",
+    "path": "wiki\\sources\\sync-vs-async.md",
+    "markdown": "---\ntitle: \"同步(Synchronous)和异步(Asynchronous)的理解和区别讲解\"\ntype: source\ntags: [并发, 同步, 异步, 基础概念]\ndate: 2026-09-28\nsource_file: raw/articles/sync-vs-async.md\n---\n\n## Summary\n\n腾讯云文章(原始发表 2023-06-11)。用购物/打电话的生活类比讲解同步与异步：同步=调用者必须等到方法返回才能继续(在店里等拿货);异步=调用立即返回,被调用者在别处执行,通过状态/通知/回调告知结果(网购下单后追剧)。核心贡献是再次钉清**同步/异步 ≠ 阻塞/非阻塞**:前者是消息通信机制(谁主动等结果),后者是线程状态(等的时候挂不挂起),并指出同步等待时线程可能仍激活、白白占资源。\n\n## Key Claims\n\n- 同步方法调用一旦开始,调用者必须等到方法调用返回后才能继续后续行为。\n- 异步方法调用更像消息传递:调用立即返回,被调用者通常\"在另外一个线程中真实执行\",通过状态通知或回调处理结果。\n- **同步/异步强调消息通信机制**;**阻塞/非阻塞强调程序在等待调用结果时的线程状态**——同步等待时线程可能是激活的(逻辑未返回、占着资源),不等于挂起。\n- 同步=强依赖对方、必须等回复;异步=不依赖响应时间,返回与否都能继续。\n\n## Key Quotes\n\n> \"同步就是我强依赖你(对方),我必须等到你的回复,才能做出下一步响应\" —— 同步的依赖本质\n\n> \"同步和异步强调的是消息通信机制……由'调用者'主动等待这个'调用'的结果\" —— 与阻塞/非阻塞划界的定义句\n\n## Connections\n\n- [[IOModels]] — 本文的同步/异步定义正是该页\"数据拷贝谁来做\"维度的通俗版\n- [[Thread]] — \"异步方法通常会在另外一个线程中执行\"对应线程作为执行载体\n- [[linux-io-models]] — 用\"两个阶段\"框架把本文概念落到 IO 模型上\n- [[claude-concurrency-io-session]] — 会话中\"打电话(同步) vs 发消息(异步)\"的同类类比\n\n## Contradictions\n\n- 无。与 [[IOModels]]、[[claude-concurrency-io-session]] 一致;本文额外强调\"同步等待≠线程挂起\"这一细节,与 [[UserModeVsKernelMode]] 对\"线程激活但逻辑未返回\"的描述互补。\n",
+    "preview": "## Summary 腾讯云文章(原始发表 2023-06-11)。用购物/打电话的生活类比讲解同步与异步：同步=调用者必须等到方法返回才能继续(在店里等拿货);异步=调用立即返回,被调用者在别处执行,通过状态/通知/回调告知结果(网购下单后追剧)。核心贡献是再次钉清**同步/异步 ≠ 阻塞/非阻塞**:前者是消息通信机制(谁主动等结果),后者是线程状态(等的时候挂不挂起),并指出同步等待时线程可能仍激活、白白占资源。 ## Key C",
+    "group": -1,
+    "value": 6
+  },
+  {
+    "id": "syntheses/thread-essence",
+    "label": "线程的本质：三层剥洋葱",
+    "type": "synthesis",
+    "color": "#9C27B0",
+    "path": "wiki\\syntheses\\thread-essence.md",
+    "markdown": "---\ntitle: \"线程的本质：三层剥洋葱\"\ntype: synthesis\ntags: [线程, 操作系统, 并发]\nsources: [process-vs-thread]\nlast_updated: 2026-09-26\n---\n\n# 线程的本质:三层剥洋葱\n\n**问题**:线程是历代计算机学者抽象后的概念,它的真实面目是什么?\n\n## 第一层:抽象层(教科书答案)\n\n**线程是 CPU 任务调度和执行的基本单位,是进程内的执行分支**([[Thread]])。全部\"私有财产\"只有三样:运行栈、程序计数器(PC)、部分寄存器;代码区、数据区、堆、文件描述符、信号处理方式全向所属 [[Process]] 借用。\n\n抽象的核心动作:**把\"执行\"从\"资源\"中剥离**——进程回答\"谁拥有资源\",线程回答\"谁在执行\"。\n\n## 第二层:硬件层(CPU 不知道线程的存在)\n\n一个物理核任意时刻只有一份寄存器现场(PC、栈指针、通用寄存器)。\"多线程并发\"在硬件看来只是 OS 周期性**把整个寄存器现场换一份**:换 PC(换指令流)、换栈指针(换函数调用栈)、换通用寄存器(换半成品计算)。\n\n**线程在硬件眼里没有\"身体\",只有一份执行现场快照。** 线程上下文切换便宜(见 [[ContextSwitch]])就因为换的仅是这几个寄存器;进程切换还要换页表基址、刷 TLB——\"换整个内存世界\",开销差 10~100 倍。\n\n抽象分界线:**线程 = 控制流 + 现场;进程 = 现场 + 资源环境。**\n\n## 第三层:内核层(Linux 没有\"线程\"数据结构)\n\nLinux 内核里进程和线程是同一个东西——`task_struct`。唯一区别是一个指针:是否共享 `mm_struct`(地址空间描述符)。`clone()` 通过标志位决定父子任务共享什么:传 `CLONE_VM` 共享地址空间就是线程,否则是新进程。\n\n**\"线程\"在内核眼里只是\"共享了内存描述符的轻量进程\"**(lightweight process)。LinuxThreads → NPTL 的演进改的也只是共享细粒度,而非发明新物种。\n\n## 抽象为什么这样画\n\n```\n协程   = 现场           (调度权在用户手里,内核无感知)\n线程   = 现场 + 内核调度   (共享地址空间)\n进程   = 现场 + 资源 + 调度 (地址空间隔离)\n```\n\n- **多进程**:隔离好,但切一次换\"整个世界\"\n- **线程**:只切执行现场,资源环境不动——用共享换效率\n- **协程**(goroutine、green threads):同一轻量化路线的延续,把\"现场\"压到只剩栈,调度权从内核交还程序\n\n## 一句话答案\n\n> **线程 = 一份被内核独立调度的执行现场(栈 + PC + 寄存器组),本身不拥有任何资源,只是进程资源容器上插着的多个控制流之一。**\n\n代价写在契约里:共享换来零拷贝通信(直接读写全局变量/堆),但一个线程崩溃整个进程被 OS 杀掉,共享数据需用 [[Semaphore]] 重建秩序。\n\n## 相关页面\n\n- [[Thread]] — 抽象层的完整定义与三类私有/五类共享资源\n- [[Process]] — 资源容器视角\n- [[ContextSwitch]] — 现场快照的保存与恢复机制\n- [[ConcurrencyAndParallelism]] — 单线程并发与多核并行\n",
+    "preview": "# 线程的本质:三层剥洋葱 **问题**:线程是历代计算机学者抽象后的概念,它的真实面目是什么? ## 第一层:抽象层(教科书答案)",
+    "group": -1,
+    "value": 11
+  }
+];
+const originalEdges = [
+  {
+    "id": "overview->concepts/Signal:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Signal",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/MessageQueue:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/MessageQueue",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/JavaMemoryModel:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/JavaMemoryModel",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/JvmRuntimeMemory:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/JvmRuntimeMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/AddressSpaceLayout:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/AddressSpaceLayout",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/Thread:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/Process:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "overview",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/MCPPrompt:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/MCPPrompt",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/IPC:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/IPC",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/IOModels:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->sources/process-vs-thread:EXTRACTED",
+    "from": "overview",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/JVM:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/JVM",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->entities/ClaudeCode:EXTRACTED",
+    "from": "overview",
+    "to": "entities/ClaudeCode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/MCPResource:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/MCPResource",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/Pipe:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/FutureAndPromise:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/FutureAndPromise",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/Goroutine:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Goroutine",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/SharedMemory:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/ModelContextProtocol:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/ModelContextProtocol",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/MCPTool:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/MCPTool",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->syntheses/thread-essence:EXTRACTED",
+    "from": "overview",
+    "to": "syntheses/thread-essence",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/IOMultiplexing:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/IOMultiplexing",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/ContextSwitch:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/Semaphore:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "overview",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/ThreadSynchronization:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/ThreadSynchronization",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->sources/mcp-explained:EXTRACTED",
+    "from": "overview",
+    "to": "sources/mcp-explained",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/EventLoop:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/EventLoop",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/Socket:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->entities/Anthropic:EXTRACTED",
+    "from": "overview",
+    "to": "entities/Anthropic",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "overview->concepts/ConcurrencyAndParallelism:EXTRACTED",
+    "from": "overview",
+    "to": "concepts/ConcurrencyAndParallelism",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/Pipe:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/JVM:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/JVM",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/IPC:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/IPC",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/Goroutine:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/Goroutine",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/JavaMemoryModel:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/JavaMemoryModel",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/JvmRuntimeMemory:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/JvmRuntimeMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/IOMultiplexing:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/IOMultiplexing",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/ContextSwitch:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/Thread:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/Process:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/AddressSpaceLayout->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "concepts/AddressSpaceLayout",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/ConcurrencyAndParallelism",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/ConcurrencyAndParallelism",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism->concepts/ContextSwitch:EXTRACTED",
+    "from": "concepts/ConcurrencyAndParallelism",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism->concepts/Thread:EXTRACTED",
+    "from": "concepts/ConcurrencyAndParallelism",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism->concepts/Process:EXTRACTED",
+    "from": "concepts/ConcurrencyAndParallelism",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ConcurrencyAndParallelism->concepts/Semaphore:EXTRACTED",
+    "from": "concepts/ConcurrencyAndParallelism",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ContextSwitch->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/ContextSwitch",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ContextSwitch->concepts/Thread:EXTRACTED",
+    "from": "concepts/ContextSwitch",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ContextSwitch->concepts/Process:EXTRACTED",
+    "from": "concepts/ContextSwitch",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ContextSwitch->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "concepts/ContextSwitch",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->concepts/FutureAndPromise:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "concepts/FutureAndPromise",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->concepts/Goroutine:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "concepts/Goroutine",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->concepts/IOModels:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->concepts/IOMultiplexing:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "concepts/IOMultiplexing",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->concepts/Thread:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/EventLoop->entities/ClaudeCode:EXTRACTED",
+    "from": "concepts/EventLoop",
+    "to": "entities/ClaudeCode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/FutureAndPromise->concepts/Thread:EXTRACTED",
+    "from": "concepts/FutureAndPromise",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/FutureAndPromise->concepts/IOModels:EXTRACTED",
+    "from": "concepts/FutureAndPromise",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/FutureAndPromise->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "concepts/FutureAndPromise",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/Semaphore:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/ContextSwitch:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/IOModels:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->syntheses/thread-essence:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "syntheses/thread-essence",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/IOMultiplexing:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/IOMultiplexing",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/Thread:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/Process:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Goroutine->concepts/ConcurrencyAndParallelism:EXTRACTED",
+    "from": "concepts/Goroutine",
+    "to": "concepts/ConcurrencyAndParallelism",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOModels->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "concepts/IOModels",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOModels->concepts/IOMultiplexing:EXTRACTED",
+    "from": "concepts/IOModels",
+    "to": "concepts/IOMultiplexing",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOModels->concepts/Thread:EXTRACTED",
+    "from": "concepts/IOModels",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOMultiplexing->concepts/Thread:EXTRACTED",
+    "from": "concepts/IOMultiplexing",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOMultiplexing->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "concepts/IOMultiplexing",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOMultiplexing->concepts/Socket:EXTRACTED",
+    "from": "concepts/IOMultiplexing",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IOMultiplexing->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "concepts/IOMultiplexing",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/Pipe:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/Signal:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/Signal",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/Thread:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/ConcurrencyAndParallelism:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/ConcurrencyAndParallelism",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/MessageQueue:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/MessageQueue",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/Socket:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/Process:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/IPC->concepts/Semaphore:EXTRACTED",
+    "from": "concepts/IPC",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JavaMemoryModel->concepts/JvmRuntimeMemory:EXTRACTED",
+    "from": "concepts/JavaMemoryModel",
+    "to": "concepts/JvmRuntimeMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JavaMemoryModel->syntheses/thread-essence:EXTRACTED",
+    "from": "concepts/JavaMemoryModel",
+    "to": "syntheses/thread-essence",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JavaMemoryModel->concepts/JVM:EXTRACTED",
+    "from": "concepts/JavaMemoryModel",
+    "to": "concepts/JVM",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JavaMemoryModel->concepts/Thread:EXTRACTED",
+    "from": "concepts/JavaMemoryModel",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JavaMemoryModel->sources/java-memory-and-jmm:EXTRACTED",
+    "from": "concepts/JavaMemoryModel",
+    "to": "sources/java-memory-and-jmm",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JavaMemoryModel->concepts/Semaphore:EXTRACTED",
+    "from": "concepts/JavaMemoryModel",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->concepts/JvmRuntimeMemory:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "concepts/JvmRuntimeMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->sources/java-memory-and-jmm:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "sources/java-memory-and-jmm",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->concepts/IOModels:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->concepts/ContextSwitch:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->concepts/Thread:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->concepts/Process:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JVM->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "concepts/JVM",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JvmRuntimeMemory->concepts/Process:EXTRACTED",
+    "from": "concepts/JvmRuntimeMemory",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JvmRuntimeMemory->concepts/IOModels:EXTRACTED",
+    "from": "concepts/JvmRuntimeMemory",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JvmRuntimeMemory->syntheses/thread-essence:EXTRACTED",
+    "from": "concepts/JvmRuntimeMemory",
+    "to": "syntheses/thread-essence",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JvmRuntimeMemory->concepts/Thread:EXTRACTED",
+    "from": "concepts/JvmRuntimeMemory",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/JvmRuntimeMemory->sources/java-memory-and-jmm:EXTRACTED",
+    "from": "concepts/JvmRuntimeMemory",
+    "to": "sources/java-memory-and-jmm",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPPrompt->concepts/ModelContextProtocol:EXTRACTED",
+    "from": "concepts/MCPPrompt",
+    "to": "concepts/ModelContextProtocol",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPPrompt->sources/mcp-explained:EXTRACTED",
+    "from": "concepts/MCPPrompt",
+    "to": "sources/mcp-explained",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPResource->concepts/ModelContextProtocol:EXTRACTED",
+    "from": "concepts/MCPResource",
+    "to": "concepts/ModelContextProtocol",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPResource->concepts/MCPTool:EXTRACTED",
+    "from": "concepts/MCPResource",
+    "to": "concepts/MCPTool",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPResource->sources/mcp-explained:EXTRACTED",
+    "from": "concepts/MCPResource",
+    "to": "sources/mcp-explained",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPTool->concepts/ModelContextProtocol:EXTRACTED",
+    "from": "concepts/MCPTool",
+    "to": "concepts/ModelContextProtocol",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MCPTool->sources/mcp-explained:EXTRACTED",
+    "from": "concepts/MCPTool",
+    "to": "sources/mcp-explained",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MessageQueue->concepts/Pipe:EXTRACTED",
+    "from": "concepts/MessageQueue",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MessageQueue->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/MessageQueue",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/MessageQueue->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/MessageQueue",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ModelContextProtocol->concepts/Pipe:EXTRACTED",
+    "from": "concepts/ModelContextProtocol",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ModelContextProtocol->sources/mcp-explained:EXTRACTED",
+    "from": "concepts/ModelContextProtocol",
+    "to": "sources/mcp-explained",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ModelContextProtocol->concepts/Socket:EXTRACTED",
+    "from": "concepts/ModelContextProtocol",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ModelContextProtocol->entities/Anthropic:EXTRACTED",
+    "from": "concepts/ModelContextProtocol",
+    "to": "entities/Anthropic",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Pipe->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/Pipe",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Pipe->concepts/Socket:EXTRACTED",
+    "from": "concepts/Pipe",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Pipe->concepts/Process:EXTRACTED",
+    "from": "concepts/Pipe",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Process->concepts/Signal:EXTRACTED",
+    "from": "concepts/Process",
+    "to": "concepts/Signal",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Process->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/Process",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Process->concepts/Thread:EXTRACTED",
+    "from": "concepts/Process",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Process->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "concepts/Process",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->concepts/Signal:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "concepts/Signal",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->concepts/ThreadSynchronization:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "concepts/ThreadSynchronization",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->concepts/Thread:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Semaphore->concepts/Process:EXTRACTED",
+    "from": "concepts/Semaphore",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/SharedMemory->concepts/Pipe:EXTRACTED",
+    "from": "concepts/SharedMemory",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/SharedMemory->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/SharedMemory",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/SharedMemory->concepts/Thread:EXTRACTED",
+    "from": "concepts/SharedMemory",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/SharedMemory->concepts/Process:EXTRACTED",
+    "from": "concepts/SharedMemory",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Signal->concepts/Pipe:EXTRACTED",
+    "from": "concepts/Signal",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Signal->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/Signal",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Signal->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/Signal",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Signal->concepts/MessageQueue:EXTRACTED",
+    "from": "concepts/Signal",
+    "to": "concepts/MessageQueue",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Signal->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/Signal",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Signal->concepts/Thread:EXTRACTED",
+    "from": "concepts/Signal",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->concepts/Signal:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "concepts/Signal",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->concepts/MessageQueue:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "concepts/MessageQueue",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->concepts/Thread:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->concepts/Process:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Socket->concepts/Semaphore:EXTRACTED",
+    "from": "concepts/Socket",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Thread->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "concepts/Thread",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/Thread->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/Thread",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ThreadSynchronization->sources/pthread-sync-primitives:EXTRACTED",
+    "from": "concepts/ThreadSynchronization",
+    "to": "sources/pthread-sync-primitives",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ThreadSynchronization->concepts/Goroutine:EXTRACTED",
+    "from": "concepts/ThreadSynchronization",
+    "to": "concepts/Goroutine",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ThreadSynchronization->concepts/JavaMemoryModel:EXTRACTED",
+    "from": "concepts/ThreadSynchronization",
+    "to": "concepts/JavaMemoryModel",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ThreadSynchronization->concepts/ContextSwitch:EXTRACTED",
+    "from": "concepts/ThreadSynchronization",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/ThreadSynchronization->concepts/Thread:EXTRACTED",
+    "from": "concepts/ThreadSynchronization",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->concepts/Signal:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "concepts/Signal",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->concepts/IPC:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "concepts/IPC",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->concepts/SharedMemory:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "concepts/SharedMemory",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->concepts/MessageQueue:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "concepts/MessageQueue",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->sources/process-vs-thread:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "concepts/UserModeVsKernelMode->concepts/Thread:EXTRACTED",
+    "from": "concepts/UserModeVsKernelMode",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "entities/Anthropic->sources/mcp-explained:EXTRACTED",
+    "from": "entities/Anthropic",
+    "to": "sources/mcp-explained",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "entities/ClaudeCode->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "entities/ClaudeCode",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "entities/ClaudeCode->concepts/Process:EXTRACTED",
+    "from": "entities/ClaudeCode",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "entities/ClaudeCode->concepts/ModelContextProtocol:EXTRACTED",
+    "from": "entities/ClaudeCode",
+    "to": "concepts/ModelContextProtocol",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "entities/ClaudeCode->concepts/Thread:EXTRACTED",
+    "from": "entities/ClaudeCode",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "entities/ClaudeCode->entities/Anthropic:EXTRACTED",
+    "from": "entities/ClaudeCode",
+    "to": "entities/Anthropic",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/claude-concurrency-io-session->concepts/Socket:EXTRACTED",
+    "from": "sources/claude-concurrency-io-session",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/claude-concurrency-io-session->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "sources/claude-concurrency-io-session",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/claude-concurrency-io-session->concepts/Process:EXTRACTED",
+    "from": "sources/claude-concurrency-io-session",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/claude-concurrency-io-session->sources/process-vs-thread:EXTRACTED",
+    "from": "sources/claude-concurrency-io-session",
+    "to": "sources/process-vs-thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/claude-concurrency-io-session->concepts/ConcurrencyAndParallelism:EXTRACTED",
+    "from": "sources/claude-concurrency-io-session",
+    "to": "concepts/ConcurrencyAndParallelism",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/java-memory-and-jmm->concepts/AddressSpaceLayout:EXTRACTED",
+    "from": "sources/java-memory-and-jmm",
+    "to": "concepts/AddressSpaceLayout",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/java-memory-and-jmm->syntheses/thread-essence:EXTRACTED",
+    "from": "sources/java-memory-and-jmm",
+    "to": "syntheses/thread-essence",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/java-memory-and-jmm->concepts/Thread:EXTRACTED",
+    "from": "sources/java-memory-and-jmm",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/java-memory-and-jmm->concepts/Semaphore:EXTRACTED",
+    "from": "sources/java-memory-and-jmm",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/linux-io-models->concepts/IOMultiplexing:EXTRACTED",
+    "from": "sources/linux-io-models",
+    "to": "concepts/IOMultiplexing",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/linux-io-models->sources/sync-vs-async:EXTRACTED",
+    "from": "sources/linux-io-models",
+    "to": "sources/sync-vs-async",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/linux-io-models->concepts/IOModels:EXTRACTED",
+    "from": "sources/linux-io-models",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/linux-io-models->concepts/AddressSpaceLayout:EXTRACTED",
+    "from": "sources/linux-io-models",
+    "to": "concepts/AddressSpaceLayout",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/mcp-explained->concepts/Pipe:EXTRACTED",
+    "from": "sources/mcp-explained",
+    "to": "concepts/Pipe",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/mcp-explained->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "sources/mcp-explained",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/mcp-explained->concepts/Socket:EXTRACTED",
+    "from": "sources/mcp-explained",
+    "to": "concepts/Socket",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/process-vs-thread->sources/six-ipc-mechanisms:EXTRACTED",
+    "from": "sources/process-vs-thread",
+    "to": "sources/six-ipc-mechanisms",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/process-vs-thread->concepts/IPC:EXTRACTED",
+    "from": "sources/process-vs-thread",
+    "to": "concepts/IPC",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/pthread-sync-primitives->concepts/ContextSwitch:EXTRACTED",
+    "from": "sources/pthread-sync-primitives",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/pthread-sync-primitives->concepts/Thread:EXTRACTED",
+    "from": "sources/pthread-sync-primitives",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/pthread-sync-primitives->concepts/Semaphore:EXTRACTED",
+    "from": "sources/pthread-sync-primitives",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/six-ipc-mechanisms->concepts/Thread:EXTRACTED",
+    "from": "sources/six-ipc-mechanisms",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/six-ipc-mechanisms->concepts/Process:EXTRACTED",
+    "from": "sources/six-ipc-mechanisms",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/sync-vs-async->sources/claude-concurrency-io-session:EXTRACTED",
+    "from": "sources/sync-vs-async",
+    "to": "sources/claude-concurrency-io-session",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/sync-vs-async->concepts/IOModels:EXTRACTED",
+    "from": "sources/sync-vs-async",
+    "to": "concepts/IOModels",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/sync-vs-async->concepts/Thread:EXTRACTED",
+    "from": "sources/sync-vs-async",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "sources/sync-vs-async->concepts/UserModeVsKernelMode:EXTRACTED",
+    "from": "sources/sync-vs-async",
+    "to": "concepts/UserModeVsKernelMode",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "syntheses/thread-essence->concepts/Semaphore:EXTRACTED",
+    "from": "syntheses/thread-essence",
+    "to": "concepts/Semaphore",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "syntheses/thread-essence->concepts/ContextSwitch:EXTRACTED",
+    "from": "syntheses/thread-essence",
+    "to": "concepts/ContextSwitch",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "syntheses/thread-essence->concepts/Thread:EXTRACTED",
+    "from": "syntheses/thread-essence",
+    "to": "concepts/Thread",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "syntheses/thread-essence->concepts/Process:EXTRACTED",
+    "from": "syntheses/thread-essence",
+    "to": "concepts/Process",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  },
+  {
+    "id": "syntheses/thread-essence->concepts/ConcurrencyAndParallelism:EXTRACTED",
+    "from": "syntheses/thread-essence",
+    "to": "concepts/ConcurrencyAndParallelism",
+    "type": "EXTRACTED",
+    "color": "#555555",
+    "confidence": 1.0,
+    "title": "",
+    "label": ""
+  }
+].map(edge => ({
+  ...edge,
+  id: edge.id || `${edge.from}->${edge.to}:${edge.type || "INFERRED"}`,
+}));
+const nodes = new vis.DataSet(originalNodes);
+const edges = new vis.DataSet(originalEdges);
+const adjacency = new Map();
+const searchInput = document.getElementById("search");
+const stats = document.getElementById("stats");
+const controls = {
+  extracted: document.getElementById("cb-extracted"),
+  inferred: document.getElementById("cb-inferred"),
+  ambiguous: document.getElementById("cb-ambiguous"),
+  confSlider: document.getElementById("conf-slider"),
+  confValue: document.getElementById("conf-val"),
+};
+const nodeMap = new Map(originalNodes.map(node => [node.id, node]));
+let activeNodeId = null;
+
+function hexToRgba(color, alpha) {
+  if (!color) return `rgba(255, 255, 255, ${alpha})`;
+  const normalized = color.replace("#", "");
+  const value = normalized.length === 3
+    ? normalized.split("").map(ch => ch + ch).join("")
+    : normalized;
+  const intValue = Number.parseInt(value, 16);
+  const r = (intValue >> 16) & 255;
+  const g = (intValue >> 8) & 255;
+  const b = intValue & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function escapeHtml(text) {
+  return (text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function stripFrontmatter(markdown) {
+  return (markdown || "").replace(/^---\n[\s\S]*?\n---\n?/, "");
+}
+
+function renderInlineMarkdown(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/\[\[([^\]]+)\]\]/g, '<span class="wikilink">[[$1]]</span>');
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return html;
+}
+
+function renderMarkdown(markdown) {
+  const lines = stripFrontmatter(markdown).split(/\r?\n/);
+  const html = [];
+  let paragraph = [];
+  let listType = null;
+  let listItems = [];
+  let quoteLines = [];
+  let inCodeBlock = false;
+  let codeLines = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (!listType || !listItems.length) return;
+    const items = listItems.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join("");
+    html.push(`<${listType}>${items}</${listType}>`);
+    listType = null;
+    listItems = [];
+  }
+
+  function flushQuote() {
+    if (!quoteLines.length) return;
+    html.push(`<blockquote>${quoteLines.map(line => renderInlineMarkdown(line)).join("<br>")}</blockquote>`);
+    quoteLines = [];
+  }
+
+  function flushCode() {
+    if (!codeLines.length) {
+      html.push("<pre><code></code></pre>");
+      return;
+    }
+    html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    codeLines = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\t/g, "    ");
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      if (inCodeBlock) {
+        flushCode();
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(rawLine);
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#(1, 6))\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      const level = headingMatch[1].length;
+      html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^(-(3,)|\*(3,))$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      html.push("<hr>");
+      continue;
+    }
+
+    const quoteMatch = trimmed.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(quoteMatch[1]);
+      continue;
+    }
+    flushQuote();
+
+    const unorderedMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    if (unorderedMatch) {
+      flushParagraph();
+      if (listType && listType !== "ul") flushList();
+      listType = "ul";
+      listItems.push(unorderedMatch[1]);
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (orderedMatch) {
+      flushParagraph();
+      if (listType && listType !== "ol") flushList();
+      listType = "ol";
+      listItems.push(orderedMatch[1]);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
+  }
+
+  if (inCodeBlock) flushCode();
+  flushParagraph();
+  flushList();
+  flushQuote();
+  return html.join("");
+}
+
+function rebuildAdjacency(filteredEdges) {
+  adjacency.clear();
+  for (const node of originalNodes) {
+    adjacency.set(node.id, new Set());
+  }
+  for (const edge of filteredEdges) {
+    if (!adjacency.has(edge.from)) adjacency.set(edge.from, new Set());
+    if (!adjacency.has(edge.to)) adjacency.set(edge.to, new Set());
+    adjacency.get(edge.from).add(edge.to);
+    adjacency.get(edge.to).add(edge.from);
+  }
+}
+
+function currentEdgeState() {
+  const minConf = parseInt(controls.confSlider.value, 10) / 100;
+  controls.confValue.textContent = minConf.toFixed(2);
+  return {
+    showExtracted: controls.extracted.checked,
+    showInferred: controls.inferred.checked,
+    showAmbiguous: controls.ambiguous.checked,
+    minConf,
+  };
+}
+
+function passesEdgeFilters(edge, edgeState) {
+  const typeOk = (edge.type === "EXTRACTED" && edgeState.showExtracted)
+    || (edge.type === "INFERRED" && edgeState.showInferred)
+    || (edge.type === "AMBIGUOUS" && edgeState.showAmbiguous);
+  const confOk = (edge.confidence ?? 1.0) >= edgeState.minConf;
+  return typeOk && confOk;
+}
+
+function searchNodes(q) {
+  applyFilters(q, activeNodeId);
+}
+
+function clearSelection() {
+  activeNodeId = null;
+  closeDrawer();
+  applyFilters(searchInput.value, null);
+}
+
+function closeDrawer() {
+  document.getElementById("drawer").classList.remove("open");
+}
+
+function openDrawer(node, relatedIds) {
+  document.getElementById("drawer").classList.add("open");
+  document.getElementById("drawer-title").textContent = node.label;
+  const communityText = Number.isInteger(node.group) && node.group >= 0 ? ` · community ${node.group}` : "";
+  document.getElementById("drawer-meta").textContent = `${node.type}${communityText}`;
+  document.getElementById("drawer-path").textContent = node.path;
+  document.getElementById("drawer-preview").textContent = node.preview || "";
+  document.getElementById("drawer-markdown").innerHTML = renderMarkdown(node.markdown || "");
+
+  const relatedList = document.getElementById("drawer-related-list");
+  relatedList.innerHTML = "";
+  const relatedNodes = originalNodes
+    .filter(item => relatedIds.has(item.id) && item.id !== node.id)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  if (relatedNodes.length === 0) {
+    const empty = document.createElement("span");
+    empty.textContent = "No directly connected nodes";
+    relatedList.appendChild(empty);
+    return;
+  }
+
+  for (const related of relatedNodes) {
+    const chip = document.createElement("button");
+    chip.className = "related-chip";
+    chip.textContent = related.label;
+    chip.onclick = () => focusNode(related.id);
+    relatedList.appendChild(chip);
+  }
+}
+
+function applyFilters(query = searchInput.value, selectedNodeId = activeNodeId) {
+  const lower = (query || "").trim().toLowerCase();
+  const edgeState = currentEdgeState();
+  const filteredEdges = originalEdges.filter(edge => passesEdgeFilters(edge, edgeState));
+  rebuildAdjacency(filteredEdges);
+
+  const relatedIds = selectedNodeId
+    ? new Set([selectedNodeId, ...(adjacency.get(selectedNodeId) || [])])
+    : null;
+  const filteredNodeIds = new Set();
+  for (const edge of filteredEdges) {
+    filteredNodeIds.add(edge.from);
+    filteredNodeIds.add(edge.to);
+  }
+
+  let visibleNodeCount = 0;
+  const nodeUpdates = originalNodes.map(node => {
+    const matchesSearch = !lower || node.label.toLowerCase().includes(lower);
+    const isActive = selectedNodeId === node.id;
+    const isConnected = filteredNodeIds.has(node.id);
+    const isRelated = !relatedIds || relatedIds.has(node.id);
+    const hidden = !selectedNodeId && !lower && !isConnected;
+    const emphasized = matchesSearch && isRelated && (isConnected || !!lower || isActive);
+
+    if (!hidden) {
+      visibleNodeCount += 1;
+    }
+
+    return {
+      id: node.id,
+      hidden,
+      color: {
+        background: emphasized ? node.color : hexToRgba(node.color, hidden ? 0.05 : 0.14),
+        border: emphasized ? hexToRgba(node.color, 0.96) : hexToRgba(node.color, hidden ? 0.08 : 0.22),
+        highlight: { background: node.color, border: hexToRgba(node.color, 1) },
+        hover: { background: node.color, border: hexToRgba(node.color, 1) },
+      },
+      font: {
+        color: emphasized ? "#f2f3f8" : hidden ? "rgba(242,243,248,0.08)" : "rgba(242,243,248,0.2)",
+      },
+      borderWidth: isActive ? 5 : 2,
+      size: isActive ? 18 : 12,
+    };
+  });
+
+  const edgeUpdates = originalEdges.map(edge => {
+    const enabled = passesEdgeFilters(edge, edgeState);
+    if (!enabled) {
+      return { id: edge.id, hidden: true };
+    }
+
+    const matchesSearch = !lower
+      || nodeMap.get(edge.from)?.label.toLowerCase().includes(lower)
+      || nodeMap.get(edge.to)?.label.toLowerCase().includes(lower);
+    const isRelated = !relatedIds || relatedIds.has(edge.from) || relatedIds.has(edge.to);
+    const touchesActive = !!selectedNodeId && (edge.from === selectedNodeId || edge.to === selectedNodeId);
+    const emphasized = matchesSearch && isRelated;
+
+    return {
+      id: edge.id,
+      hidden: false,
+      width: touchesActive ? 2.8 : emphasized ? 1.2 : 0.6,
+      color: emphasized ? edge.color : hexToRgba(edge.color, 0.08),
+    };
+  });
+
+  nodes.update(nodeUpdates);
+  edges.update(edgeUpdates);
+
+  if (selectedNodeId) {
+    const activeNode = nodeMap.get(selectedNodeId);
+    if (activeNode) {
+      openDrawer(activeNode, relatedIds || new Set([selectedNodeId]));
+    }
+  }
+
+  const focusSuffix = selectedNodeId && nodeMap.get(selectedNodeId)
+    ? ` · focused: ${nodeMap.get(selectedNodeId).label}`
+    : "";
+  stats.textContent = `${visibleNodeCount} nodes · ${filteredEdges.length} edges${focusSuffix}`;
+}
+
+const container = document.getElementById("graph");
+
+// Adaptive physics based on graph size
+const nodeCount = originalNodes.length;
+const gravConst = nodeCount > 80 ? -8000 : nodeCount > 30 ? -5000 : -2000;
+const springLen = nodeCount > 80 ? 250 : nodeCount > 30 ? 200 : 150;
+
+const network = new vis.Network(container, { nodes, edges }, {
+  nodes: {
+    shape: "dot",
+    font: { color: "#ddd", size: 12, strokeWidth: 3, strokeColor: "#111" },
+    borderWidth: 1.5,
+    scaling: {
+      min: 8,
+      max: 40,
+      label: { enabled: true, min: 10, max: 20, drawThreshold: 6, maxVisible: 24 },
+    },
+  },
+  edges: {
+    width: 0.8,
+    smooth: { type: "continuous" },
+    arrows: { to: { enabled: true, scaleFactor: 0.4 } },
+    color: { inherit: false },
+    hoverWidth: 2,
+  },
+  physics: {
+    stabilization: { iterations: 250, updateInterval: 25, fit: true },
+    barnesHut: { gravitationalConstant: gravConst, springLength: springLen, springConstant: 0.02, damping: 0.15 },
+    minVelocity: 0.75,
+  },
+  interaction: { hover: true, tooltipDelay: 150, hideEdgesOnDrag: true, hideEdgesOnZoom: true },
+});
+
+// Ensure the graph fits the viewport after physics stabilization
+network.once("stabilizationIterationsDone", function () {
+  network.fit({ animation: { duration: 400, easingFunction: "easeInOutQuad" } });
+});
+
+function focusNode(nodeId) {
+  activeNodeId = nodeId;
+  applyFilters(searchInput.value, nodeId);
+  const node = nodeMap.get(nodeId) || nodes.get(nodeId);
+  const relatedIds = new Set([nodeId, ...(adjacency.get(nodeId) || [])]);
+  openDrawer(node, relatedIds);
+  network.focus(nodeId, {
+    scale: 1.1,
+    animation: { duration: 300, easingFunction: "easeInOutQuad" },
+  });
+}
+
+network.on("click", params => {
+  if (params.nodes.length > 0) {
+    focusNode(params.nodes[0]);
+  } else {
+    clearSelection();
+  }
+});
+
+applyFilters();
+</script>
+</body>
+</html>

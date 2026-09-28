@@ -1,0 +1,46 @@
+site_name: LLM Wiki
+site_description: 由 LLM 维护的个人知识库 — 操作系统、并发与 IO、AI 基础设施
+docs_dir: wiki
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到暗色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      toggle:
+        icon: material/weather-night
+        name: 切换到亮色模式
+  features:
+    - navigation.top
+    - navigation.sections
+    - navigation.indexes
+    - toc.follow
+    - content.action.view
+    - search.highlight
+    - search.suggest
+
+plugins:
+  - roamlinks
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences

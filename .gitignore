@@ -7,3 +7,9 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# MkDocs site output
+site/
+
+# Copied into wiki/ at build time (source of truth: graph/graph.html)
+wiki/graph.html

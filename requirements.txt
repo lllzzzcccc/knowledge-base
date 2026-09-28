@@ -2,3 +2,7 @@
 # Pin to a verified safe version. See: https://github.com/SamurAIGPT/llm-wiki-agent/issues/41
 litellm~=1.83.10
 networkx~=3.6.1
+
+# Wiki site (mkdocs + Material + wikilinks)
+mkdocs-material~=9.6
+mkdocs-roamlinks-plugin~=0.1.3
