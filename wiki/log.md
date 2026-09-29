@@ -63,3 +63,7 @@ CSDN 文章（raw/articles/pthread-sync-primitives.md）。pthread 五类原语�
 ## [2026-09-29] query | PCB 在哪？进程内存结构图里为何没有它？
 
 由会话问答提炼新增概念页 concepts/ProcessControlBlock.md：PCB 不在进程地址空间，住内核直接映射区（Linux = task_struct，slab 分配）；内容六类（状态/上下文现场/mm 指针/调度信息/资源清单/身份）；生命周期随 fork/切换/退出；用户经 /proc、ps 间接查看；配套每进程内核栈与 current 宏。Process、ContextSwitch 两页回链，index 登记。核心结论：地址空间是"房间"，PCB 是"物业档案"，经 mm_struct 指针关联。
+
+## [2026-09-29] graph | Knowledge graph rebuilt
+
+39 nodes, 216 edges (216 extracted, 0 inferred).

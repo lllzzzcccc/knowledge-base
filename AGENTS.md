@@ -29,7 +29,11 @@ wiki/         # Agent owns this layer entirely
   overview.md # Living synthesis across all sources
   sources/    # One summary page per source document
   entities/   # People, companies, projects, products
-  concepts/   # Ideas, frameworks, methods, theories
+  concepts/   # Ideas, frameworks, methods, theories (grouped by theme)
+    os/           # OS fundamentals: process, thread, IPC, memory layout…
+    concurrency/  # Concurrency & IO: IO models, event loop, goroutine, sync primitives
+    java/         # Java & JVM
+    mcp/          # MCP & AI infrastructure
   syntheses/  # Saved query answers
 graph/        # Auto-generated graph data
 tools/        # Standalone Python scripts
@@ -75,7 +79,7 @@ Steps (in order):
 8. Flag any contradictions with existing wiki content
 9. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <Title>`
 10. **Post-ingest validation** — check for broken `[[wikilinks]]`, verify all new pages are in `index.md`, print a change summary
-11. **Update `mkdocs.yml` nav** — file new pages under the matching theme group (操作系统基础 / 并发与 IO / Java 与 JVM / MCP 与 AI / 实体 / 综合 / 来源); storage stays flat, only the site navigation is grouped
+11. **File new pages by theme** — concept pages go into the matching `concepts/` subfolder (`os` / `concurrency` / `java` / `mcp`); update both `wiki/index.md` links and the `mkdocs.yml` nav with the new path
 
 ### Source Page Format
 
