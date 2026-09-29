@@ -21,6 +21,7 @@ This file is maintained by the LLM. Updated on every ingest.
 
 ## Concepts
 - [进程 (Process)](concepts/Process.md) — 资源分配基本单位；地址空间结构与生命周期
+- [进程控制块 (PCB)](concepts/ProcessControlBlock.md) — 内核管理进程的档案：位置在内存何处、装什么、何时读写
 - [线程 (Thread)](concepts/Thread.md) — CPU 调度执行基本单位；三类私有资源与五类共享资源
 - [上下文切换 (Context Switch)](concepts/ContextSwitch.md) — 进程/线程上下文构成与 10~100 倍开销差
 - [用户态与内核态 (User Mode & Kernel Mode)](concepts/UserModeVsKernelMode.md) — 系统调用与陷入；判断代码是否进内核的方法（含 strace 验证）
