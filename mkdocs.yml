@@ -33,6 +33,58 @@ plugins:
   - roamlinks
   - search
 
+nav:
+  - 首页: index.md
+  - 总览: overview.md
+  - 知识图谱: graph.html
+  - 概念:
+      - 操作系统基础:
+          - 进程 (Process): concepts/Process.md
+          - 进程控制块 (PCB): concepts/ProcessControlBlock.md
+          - 线程 (Thread): concepts/Thread.md
+          - 上下文切换 (Context Switch): concepts/ContextSwitch.md
+          - 用户态与内核态: concepts/UserModeVsKernelMode.md
+          - 并发与并行: concepts/ConcurrencyAndParallelism.md
+          - 进程地址空间布局: concepts/AddressSpaceLayout.md
+          - 进程通信 (IPC): concepts/IPC.md
+          - 管道 (Pipe): concepts/Pipe.md
+          - 消息队列 (Message Queue): concepts/MessageQueue.md
+          - 共享内存 (Shared Memory): concepts/SharedMemory.md
+          - 信号量与 PV 操作: concepts/Semaphore.md
+          - 信号 (Signal): concepts/Signal.md
+          - 套接字 (Socket): concepts/Socket.md
+      - 并发与 IO:
+          - IO 模型 (BIO/NIO/AIO): concepts/IOModels.md
+          - IO 多路复用: concepts/IOMultiplexing.md
+          - 事件循环 (Event Loop): concepts/EventLoop.md
+          - Future 与 Promise: concepts/FutureAndPromise.md
+          - 协程与 Goroutine: concepts/Goroutine.md
+          - 线程同步原语: concepts/ThreadSynchronization.md
+      - Java 与 JVM:
+          - Java 虚拟机 (JVM): concepts/JVM.md
+          - JVM 运行时数据区: concepts/JvmRuntimeMemory.md
+          - Java 内存模型 (JMM): concepts/JavaMemoryModel.md
+      - MCP 与 AI:
+          - 模型上下文协议 (MCP): concepts/ModelContextProtocol.md
+          - MCP 工具 (Tools): concepts/MCPTool.md
+          - MCP 资源 (Resources): concepts/MCPResource.md
+          - MCP 提示词 (Prompts): concepts/MCPPrompt.md
+  - 实体:
+      - Anthropic: entities/Anthropic.md
+      - Claude Code: entities/ClaudeCode.md
+  - 综合:
+      - 线程的本质：三层剥洋葱: syntheses/thread-essence.md
+  - 来源:
+      - 进程 vs 线程：从原理到区别，一次讲清楚: sources/process-vs-thread.md
+      - 一文搞懂六大进程通信机制原理: sources/six-ipc-mechanisms.md
+      - MCP 到底是什么？一文带你彻底搞懂: sources/mcp-explained.md
+      - 深入理解Java内存区域与内存模型: sources/java-memory-and-jmm.md
+      - 同步(Synchronous)和异步(Asynchronous)的理解和区别讲解: sources/sync-vs-async.md
+      - Linux IO模型：阻塞、非阻塞、多路复用、异步: sources/linux-io-models.md
+      - Claude 会话：多 Agent 并发模型与 Java/Node IO 模型深谈: sources/claude-concurrency-io-session.md
+      - 线程同步与互斥(pthread 原语详解): sources/pthread-sync-primitives.md
+  - 日志: log.md
+
 markdown_extensions:
   - admonition
   - tables

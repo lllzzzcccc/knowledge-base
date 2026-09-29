@@ -75,6 +75,7 @@ Steps (in order):
 8. Flag any contradictions with existing wiki content
 9. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <Title>`
 10. **Post-ingest validation** — check for broken `[[wikilinks]]`, verify all new pages are in `index.md`, print a change summary
+11. **Update `mkdocs.yml` nav** — file new pages under the matching theme group (操作系统基础 / 并发与 IO / Java 与 JVM / MCP 与 AI / 实体 / 综合 / 来源); storage stays flat, only the site navigation is grouped
 
 ### Source Page Format
 
