@@ -11,5 +11,8 @@ env/
 # MkDocs site output
 site/
 
+# Obsidian local config (personal settings, not shared)
+.obsidian/
+
 # Copied into wiki/ at build time (source of truth: graph/graph.html)
 wiki/graph.html
